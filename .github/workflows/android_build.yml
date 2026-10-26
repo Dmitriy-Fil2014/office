@@ -29,17 +29,18 @@ jobs:
         path: .buildozer
         key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
 
-    # 4. Устанавливаем системные библиотеки Linux (Добавлены фиксы для макросов)
+    # 4. Устанавливаем полный комплект системных утилит Linux для компиляции макросов
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-    # 5. Устанавливаем Buildozer и Cython
+    # 5. Устанавливаем самую свежую версию Buildozer напрямую из исходников Kivy без обрезанных ссылок
     - name: Install Buildozer and Cython
       run: |
         pip3 install --upgrade pip
-        pip3 install buildozer cython virtualenv wheel setuptools
+        pip3 install cython virtualenv wheel setuptools
+        pip3 install git+https://github.com
 
     # 6. Запускаем компиляцию APK
     - name: Build Android APK
@@ -52,4 +53,3 @@ jobs:
       with:
         name: Local-Office-APK
         path: bin/*.apk
-
