@@ -4,45 +4,43 @@ on:
   push:
     branches: [ "main" ]
 
+# Включаем принудительное логирование всех скрытых процессов
+env:
+  ACTIONS_STEP_DEBUG: true
+  ACTIONS_RUNNER_DEBUG: true
+
 jobs:
   build:
     runs-on: ubuntu-24.04
 
     steps:
-    # 1. Клонируем ваш код (актуальная версия)
+    # 1. Скачиваем чистый код
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         submodules: false
 
-    # 2. Настраиваем Java 17 (официальный экшен v5 для Node 24)
+    # 2. Настраиваем Java 17 под Node 24 (используем экшен v5)
     - name: Set up JDK 17
       uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    # 3. Кэшируем компоненты Buildozer (актуальная версия)
-    - name: Cache Buildozer
-      uses: actions/cache@v4
-      with:
-        path: .buildozer
-        key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
-
-    # 4. Устанавливаем системные библиотеки Linux
+    # 3. Устанавливаем системные пакеты Linux (очищено и оптимизировано)
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-    # 5. Устанавливаем инструменты сборщика Kivy напрямую из мастера разработчиков
+    # 4. Ставим самую свежую стабильную ветку Buildozer
     - name: Install Buildozer and Cython
       run: |
         pip3 install --upgrade pip
         pip3 install cython virtualenv wheel setuptools
         pip3 install git+https://github.com
 
-    # 6. Запускаем компиляцию APK с выводом подробных логов ошибок
+    # 5. Запуск компиляции с выводом максимальной отладки Kivy
     - name: Build Android APK
       run: |
         yes | buildozer android debug
