@@ -1,81 +1,55 @@
-name: Build Android APK (Local-Office)
+name: Build Local Office APK
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-24.04
 
     steps:
-      # 1. Устанавливаем переменные окружения ГЛОБАЛЬНО для всего раннера
-      - name: Set up Environment Variables
-        run: |
-          echo "JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64" >> $GITHUB_ENV
-          echo "/usr/lib/jvm/temurin-17-jdk-amd64/bin" >> $GITHUB_PATH
+    # 1. Скачиваем чистый код проекта
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: false
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+    # 2. Настраиваем Java 17 под Node 24 (Ошибочная строка удалена, пути настроятся сами)
+    - name: Set up JDK 17
+      uses: actions/setup-java@v5
+      with:
+        distribution: 'temurin'
+        java-version: '17'
 
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+    # 3. Устанавливаем системные пакеты Linux
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y temurin-17-jdk-headless
-          sudo apt-get install -y autoconf automake libtool libtool-bin m4 pkg-config
-          sudo apt-get install -y build-essential git python3 python3-venv python3-dev \
-            libssl-dev libffi-dev zlib1g-dev libjpeg-dev libtiff-dev libsdl2-dev \
-            libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
-            libswscale-dev libavformat-dev libavcodec-dev libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev libgtk-3-dev
-          # FIX для libffi
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.8 /usr/lib/x86_64-linux-gnu/libffi.so.6 || true
+    # 4. Создаем обычного пользователя "builder", чтобы обойти затык Root-прав Buildozer
+    - name: Create non-root user
+      run: |
+        sudo useradd -m builder
+        sudo chown -R builder:builder $GITHUB_WORKSPACE
 
-      - name: Verify Java version
-        run: java -version
+    # 5. Устанавливаем Buildozer и Cython от имени нового пользователя
+    - name: Install Buildozer and Cython
+      run: |
+        sudo -u builder pip3 install --upgrade pip --break-system-packages
+        sudo -u builder pip3 install cython virtualenv wheel setuptools --break-system-packages
+        sudo -u builder pip3 install git+https://github.com --break-system-packages
 
-      - name: Create non-root user 'builder'
-        run: |
-          id -u builder &>/dev/null || sudo useradd -m -s /bin/bash builder
-          sudo chown -R builder:builder ${{ github.workspace }}
+    # 6. Запускаем компиляцию APK строго от имени пользователя builder (без вопросов про root)
+    - name: Build Android APK
+      run: |
+        sudo -u builder env "PATH=$PATH:/home/builder/.local/bin" buildozer android debug
 
-      - name: Set up Python venv for builder
-        run: |
-          sudo -u builder python3 -m venv venv
-          sudo -u builder bash -c "source venv/bin/activate && pip install --upgrade pip"
-
-      - name: Install pinned Cython and Buildozer
-        run: |
-          sudo -u builder bash -c "source venv/bin/activate && pip install cython==0.29.36"
-          sudo -u builder bash -c "source venv/bin/activate && pip install git+https://github.com/kivy/buildozer.git"
-
-      - name: Initialize Buildozer
-        run: |
-          sudo -u builder bash -c "source venv/bin/activate && buildozer init"
-
-      - name: Force correct buildozer.spec settings
-        run: |
-          sed -i 's/android.api = .*/android.api = 34/' buildozer.spec
-          sed -i 's/android.minapi = .*/android.minapi = 21/' buildozer.spec
-          sed -i 's/android.archs = .*/android.archs = arm64-v8a/' buildozer.spec
-          sed -i 's/icon.filename = .*/icon.filename = app_icon.png/' buildozer.spec
-          sed -i 's/^requirements = .*/requirements = python3,hostpython3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,cython==0.29.36,sqlite3/' buildozer.spec
-          sed -i 's/--no-ansi//' buildozer.spec
-
-      - name: Build APK (Debug)
-        run: |
-          sudo -u builder bash -c "source venv/bin/activate && buildozer -v android debug --user"
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Local-Office-APK
-          path: bin/*.apk
+    # 7. Загружаем готовый APK-файл в раздел артефактов GitHub
+    - name: Upload APK Artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Local-Office-APK
+        path: bin/*.apk
