@@ -9,12 +9,14 @@ jobs:
   build:
     runs-on: ubuntu-24.04
 
-    env:
-      JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
-      PATH: ${{ env.JAVA_HOME }}/bin:${{ env.PATH }}
-
     steps:
-      - name: Checkout repository (Node 22 stable)
+      # 1. Устанавливаем переменные окружения ГЛОБАЛЬНО для всего раннера
+      - name: Set up Environment Variables
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64" >> $GITHUB_ENV
+          echo "/usr/lib/jvm/temurin-17-jdk-amd64/bin" >> $GITHUB_PATH
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -24,21 +26,56 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install system dependencies (Java 17, build tools, libffi)
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y temurin-17-jdk-headless
-          
-          # Макросы для автоконфигурации
           sudo apt-get install -y autoconf automake libtool libtool-bin m4 pkg-config
-          
-          # Критически важные библиотеки для hostpython3 и Kivy
           sudo apt-get install -y build-essential git python3 python3-venv python3-dev \
             libssl-dev libffi-dev zlib1g-dev libjpeg-dev libtiff-dev libsdl2-dev \
             libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
             libswscale-dev libavformat-dev libavcodec-dev libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev libgtk-3-dev
-            
-          # FIX: Создаем симлинк libffi.so.6, который требует старый Python 3.10 из hostpython3
-          # в Ubuntu 24.04 по умолчанию стоит libffi.so.8
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.8 /usr/lib/x86_64-linux-gnu/libffi.
+          # FIX для libffi
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/libffi.so.8 /usr/lib/x86_64-linux-gnu/libffi.so.6 || true
+
+      - name: Verify Java version
+        run: java -version
+
+      - name: Create non-root user 'builder'
+        run: |
+          id -u builder &>/dev/null || sudo useradd -m -s /bin/bash builder
+          sudo chown -R builder:builder ${{ github.workspace }}
+
+      - name: Set up Python venv for builder
+        run: |
+          sudo -u builder python3 -m venv venv
+          sudo -u builder bash -c "source venv/bin/activate && pip install --upgrade pip"
+
+      - name: Install pinned Cython and Buildozer
+        run: |
+          sudo -u builder bash -c "source venv/bin/activate && pip install cython==0.29.36"
+          sudo -u builder bash -c "source venv/bin/activate && pip install git+https://github.com/kivy/buildozer.git"
+
+      - name: Initialize Buildozer
+        run: |
+          sudo -u builder bash -c "source venv/bin/activate && buildozer init"
+
+      - name: Force correct buildozer.spec settings
+        run: |
+          sed -i 's/android.api = .*/android.api = 34/' buildozer.spec
+          sed -i 's/android.minapi = .*/android.minapi = 21/' buildozer.spec
+          sed -i 's/android.archs = .*/android.archs = arm64-v8a/' buildozer.spec
+          sed -i 's/icon.filename = .*/icon.filename = app_icon.png/' buildozer.spec
+          sed -i 's/^requirements = .*/requirements = python3,hostpython3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,cython==0.29.36,sqlite3/' buildozer.spec
+          sed -i 's/--no-ansi//' buildozer.spec
+
+      - name: Build APK (Debug)
+        run: |
+          sudo -u builder bash -c "source venv/bin/activate && buildozer -v android debug --user"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-Office-APK
+          path: bin/*.apk
