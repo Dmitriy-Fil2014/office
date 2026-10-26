@@ -1,54 +1,91 @@
-name: Build Local Office APK
+name: Build Android APK (Local-First)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-24.04
 
+    # Критически важно для Kivy/Buildozer: принудительно задаем Java 17
+    # и Node.js 22 для обхода депрекации и багов checkout@v4
+    env:
+      JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
+      PATH: ${{ env.JAVA_HOME }}/bin:${{ env.PATH }}
+
     steps:
-      # 1. Скачиваем чистый код проекта
-      - name: Checkout code
+      - name: Checkout repository (v4 + Node 22)
         uses: actions/checkout@v4
         with:
-          submodules: false
+          # Обход ошибки .extraheader на Node 24
+          persist-credentials: false
 
-      # 2. Настраиваем Java 17 под Node 24
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          node-version: '22'
 
-      # 3. Устанавливаем системные пакеты Linux
-      - name: Install dependencies
+      - name: Install system dependencies (Java 17, build tools, macros)
         run: |
+          # Устанавливаем Java 17 (на Ubuntu 24.04 она есть в main репозитории)
           sudo apt-get update
-          sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
+          sudo apt-get install -y openjdk-17-jdk-headless
+          
+          # Устанавливаем макросы автоконфигурации, которых нет в базовом образе Ubuntu 24.04
+          sudo apt-get install -y autoconf automake libtool libtool-bin m4 pkg-config
+          
+          # Устанавливаем зависимости для графики и сборки Python (требуются Kivy)
+          sudo apt-get install -y build-essential git python3 python3-venv python3-dev \
+            libssl-dev libffi-dev zlib1g-dev libjpeg-dev libtiff-dev libsdl2-dev \
+            libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev \
+            libswscale-dev libavformat-dev libavcodec-dev libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev libgtk-3-dev
 
-      # 4. Создаем обычного пользователя "builder", чтобы избежать работы от root
-      - name: Create non-root user
+      - name: Create non-root user 'builder'
         run: |
-          sudo useradd -m builder
-          sudo chown -R builder:builder $GITHUB_WORKSPACE
+          # Создаем пользователя, чтобы Buildozer не падал на проверке root
+          sudo useradd -m -s /bin/bash builder
+          # Выдаем права на рабочую папку, чтобы пользователь мог писать в $GITHUB_WORKSPACE
+          sudo chown -R builder:builder ${{ github.workspace }}
 
-      # 5. Устанавливаем Buildozer и зависимости от имени пользователя builder
-      - name: Install Buildozer and dependencies
+      - name: Set up Python environment for builder
         run: |
-          sudo -u builder pip3 install --upgrade pip --break-system-packages
-          sudo -u builder pip3 install cython virtualenv wheel setuptools buildozer --break-system-packages
+          # Переключаемся на пользователя builder
+          sudo -u builder python3 -m venv venv
+          sudo -u bash -c "source venv/bin/bin/activate && pip install --upgrade pip setuptools wheel"
 
-      # 6. Запускаем компиляцию APK строго от имени пользователя builder
-      - name: Build Android APK
+      - name: Install Buildozer from master (Kivy repo)
         run: |
-          sudo -u builder env "PATH=$PATH:/home/builder/.local/bin" buildozer android debug
+          # Собираем от имени builder. --user не даст ему упасть на вопросе [y/n].
+          sudo -u builder bash -c "source venv/bin/activate && pip install git+https://github.com/kivy/buildozer.git"
 
-      # 7. Загружаем готовый APK-файл в артефакты GitHub
+      - name: Initialize Buildozer
+        run: |
+          # Инициализация должна пройти от пользователя builder
+          sudo -u builder bash -c "source venv/bin/activate && buildozer init"
+
+      - name: Patch buildozer.spec (if needed)
+        # Этот шаг гарантирует, что твои настройки не перезатрутся, если в шаблоне Buildozer что-то изменится
+        run: |
+          sed -i 's/android.api = .*/android.api = 34/' buildozer.spec
+          sed -i 's/android.minapi = .*/android.minapi = 21/' buildozer.spec
+          sed -i 's/android.archs = .*/android.archs = arm64-v8a/' buildozer.spec
+          sed -i 's/icon.filename = .*/icon.filename = app_icon.png/' buildozer.spec
+          # ВАЖНО: Убираем --no-ansi, чтобы видеть реальные ошибки компиляции Cython/C-библиотек
+          sed -i 's/--no-ansi//' buildozer.spec
+          # ВАЖНО: Убедимся, что требования указаны одной строкой (Buildozer ломается на переносах)
+          sed -i 's/requirements = .*/requirements = python3,hostpython3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,lxml,sqlite3/' buildozer.spec
+
+      - name: Build APK (Debug)
+        run: |
+          # Запуск сборки. Флаг --user критически важен для работы не от root.
+          sudo -u builder bash -c "source venv/bin/activate && buildozer -v android debug --user"
+
       - name: Upload APK Artifact
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Local-Office-APK
           path: bin/*.apk
+          retention-days: 7
