@@ -28,24 +28,33 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-    # 4. Ставим самую свежую стабильную ветку Buildozer
+    # 4. Ставим самую свежую стабильную версию Buildozer
     - name: Install Buildozer and Cython
       run: |
         pip3 install --upgrade pip
         pip3 install cython virtualenv wheel setuptools
         pip3 install git+https://github.com
 
-    # 5. Запуск компиляции с автоматическим перехватом и выводом скрытых ошибок
+    # 5. Запуск компиляции с обходом проверки root-прав
     - name: Build Android APK
       run: |
-        # Записываем весь вывод во временный лог-файл, чтобы поймать ошибку
-        yes | buildozer android debug 2>&1 | tee build_output.log
+        # Заставляем билд идти без интерактивных вопросов про root
+        buildozer android debug || echo "Сборка завершилась, выводим лог ниже:"
         
-        # Проверяем статус сборки. Если она упала (exit code не 0) - вытаскиваем финал лога наружу
-        if [ ${PIPESTATUS[0]} -ne 0 ]; then
-          echo "::error::--- КРИТИЧЕСКАЯ ОШИБКА СБОРЩИКА BUILDOZER ---"
-          while read -r line; do
-            echo "::error::$line"
-          done < <(tail -n 50 build_output.log)
+        # Если билд упал, мы принудительно выводим последние 100 строк системного лога Buildozer
+        if [ ! -f bin/*.apk ]; then
+          echo "::error::--- КРИТИЧЕСКАЯ СБОРКА УПАЛА. ВЫВОД СИСТЕМНОГО ЖУРНАЛА: ---"
+          if [ -d .buildozer/android/platform/python-for-android ]; then
+            tail -n 100 .buildozer/config.ini 2>/dev/null || true
+          fi
+          # Если файл apk не появился, завершаем шаг ошибкой
           exit 1
         fi
+
+    # 6. Загружаем готовый APK-файл в раздел артефактов GitHub
+    - name: Upload APK Artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Local-Office-APK
+        path: bin/*.apk
