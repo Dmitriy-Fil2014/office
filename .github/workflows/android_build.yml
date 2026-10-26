@@ -9,47 +9,46 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    # 1. Скачиваем чистый код проекта
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        submodules: false
+      # 1. Скачиваем чистый код проекта
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
 
-    # 2. Настраиваем Java 17 под Node 24
-    - name: Set up JDK 17
-      uses: actions/setup-java@v5
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      # 2. Настраиваем Java 17 под Node 24
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-    # 3. Устанавливаем системные пакеты Linux
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
+      # 3. Устанавливаем системные пакеты Linux
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-    # 4. ВАЖНО: Создаем обычного пользователя "builder", чтобы обойти ошибку Root-прав
-    - name: Create non-root user
-      run: |
-        sudo useradd -m builder
-        sudo chown -R builder:builder $GITHUB_WORKSPACE
+      # 4. Создаем обычного пользователя "builder", чтобы избежать работы от root
+      - name: Create non-root user
+        run: |
+          sudo useradd -m builder
+          sudo chown -R builder:builder $GITHUB_WORKSPACE
 
-    # 5. Устанавливаем Buildozer и Cython от имени нового пользователя
-    - name: Install Buildozer and Cython
-      run: |
-        sudo -u builder pip3 install --upgrade pip --break-system-packages
-        sudo -u builder pip3 install cython virtualenv wheel setuptools --break-system-packages
-        sudo -u builder pip3 install git+https://github.com --break-system-packages
+      # 5. Устанавливаем Buildozer и зависимости от имени пользователя builder
+      - name: Install Buildozer and dependencies
+        run: |
+          sudo -u builder pip3 install --upgrade pip --break-system-packages
+          sudo -u builder pip3 install cython virtualenv wheel setuptools buildozer --break-system-packages
 
-    # 6. Запускаем компиляцию APK строго от имени пользователя builder (без вопросов про root)
-    - name: Build Android APK
-      run: |
-        sudo -u builder env "PATH=$PATH:/home/builder/.local/bin" buildozer android debug
+      # 6. Запускаем компиляцию APK строго от имени пользователя builder
+      - name: Build Android APK
+        run: |
+          sudo -u builder env "PATH=$PATH:/home/builder/.local/bin" buildozer android debug
 
-    # 7. Загружаем готовый APK-файл в раздел артефактов GitHub
-    - name: Upload APK Artifact
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: Local-Office-APK
-        path: bin/*.apk
+      # 7. Загружаем готовый APK-файл в артефакты GitHub
+      - name: Upload APK Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-Office-APK
+          path: bin/*.apk
