@@ -15,38 +15,35 @@ jobs:
       with:
         submodules: false
 
-    # 2. Настраиваем Java 17 под Node 24 (Ошибочная строка удалена, пути настроятся сами)
+    # 2. Настраиваем Java 17 под требования Node 24
     - name: Set up JDK 17
       uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    # 3. Устанавливаем системные пакеты Linux
+    # 3. Устанавливаем системные пакеты Linux для компиляции макросов C-библиотек
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-    # 4. Создаем обычного пользователя "builder", чтобы обойти затык Root-прав Buildozer
-    - name: Create non-root user
-      run: |
-        sudo useradd -m builder
-        sudo chown -R builder:builder $GITHUB_WORKSPACE
-
-    # 5. Устанавливаем Buildozer и Cython от имени нового пользователя
+    # 4. Устанавливаем Buildozer и Cython в систему
     - name: Install Buildozer and Cython
       run: |
-        sudo -u builder pip3 install --upgrade pip --break-system-packages
-        sudo -u builder pip3 install cython virtualenv wheel setuptools --break-system-packages
-        sudo -u builder pip3 install git+https://github.com --break-system-packages
+        pip3 install --upgrade pip --break-system-packages
+        pip3 install cython virtualenv wheel setuptools --break-system-packages
+        pip3 install git+https://github.com --break-system-packages
 
-    # 6. Запускаем компиляцию APK строго от имени пользователя builder (без вопросов про root)
+    # 5. Запускаем компиляцию APK с системным флагом обхода Root-прав
     - name: Build Android APK
+      env:
+        # Этот флаг принудительно заставляет Buildozer работать в облаке от имени root без вопросов [y/n]
+        BUILDOZER_ALLOW_KIVY_BUILD_FROM_ROOT: 1
       run: |
-        sudo -u builder env "PATH=$PATH:/home/builder/.local/bin" buildozer android debug
+        buildozer android debug
 
-    # 7. Загружаем готовый APK-файл в раздел артефактов GitHub
+    # 6. Загружаем готовый APK-файл в раздел артефактов GitHub
     - name: Upload APK Artifact
       if: success()
       uses: actions/upload-artifact@v4
