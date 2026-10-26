@@ -1,0 +1,53 @@
+name: Build Local Office APK
+
+# Сборка будет запускаться автоматически при каждом пуше в ветку main
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Клонируем ваш код из репозитория на виртуальный сервер GitHub
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Настраиваем Java 17, которая необходима для Android SDK/NDK
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    # 3. Кэшируем компоненты Buildozer, чтобы каждая следующая сборка шла за 1 минуту
+    - name: Cache Buildozer
+      uses: actions/cache@v4
+      with:
+        path: .buildozer
+        key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+
+    # 4. Устанавливаем системные библиотеки Linux внутри облака GitHub
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
+
+    # 5. Устанавливаем сам Buildozer и Cython
+    - name: Install Buildozer and Cython
+      run: |
+        pip3 install --upgrade pip
+        pip3 install buildozer cython virtualenv wheel setuptools
+
+    # 6. Запускаем компиляцию APK. Команда "yes |" автоматически примет лицензии Google за вас
+    - name: Build Android APK
+      run: |
+        yes | buildozer android debug
+
+    # 7. Загружаем готовый APK-файл в раздел артефактов GitHub, чтобы вы могли его скачать
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Local-Office-APK
+        path: bin/*.apk
