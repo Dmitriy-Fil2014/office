@@ -6,17 +6,18 @@ on:
 
 jobs:
   build:
-    # ВАЖНО: Заменяем ubuntu-latest на ubuntu-24.04, чтобы избежать багов Java 25
     runs-on: ubuntu-24.04
 
     steps:
-    # 1. Клонируем ваш код (обновлено до v4)
+    # 1. Клонируем ваш код (игнорируем конфликты вложенных git-папок)
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        submodules: false
 
-    # 2. Настраиваем Java 17 (обновлено до стабильной версии v4)
+    # 2. Настраиваем Java 17 (Перешли на официальный актуальный экшен v5)
     - name: Set up JDK 17
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: 'temurin'
         java-version: '17'
