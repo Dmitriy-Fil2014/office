@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    # 1. Скачиваем чистый код
+    # 1. Скачиваем чистый код проекта
     - name: Checkout code
       uses: actions/checkout@v4
       with:
@@ -28,30 +28,25 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake
 
-    # 4. Ставим самую свежую стабильную версию Buildozer
+    # 4. ВАЖНО: Создаем обычного пользователя "builder", чтобы обойти ошибку Root-прав
+    - name: Create non-root user
+      run: |
+        sudo useradd -m builder
+        sudo chown -R builder:builder $GITHUB_WORKSPACE
+
+    # 5. Устанавливаем Buildozer и Cython от имени нового пользователя
     - name: Install Buildozer and Cython
       run: |
-        pip3 install --upgrade pip
-        pip3 install cython virtualenv wheel setuptools
-        pip3 install git+https://github.com
+        sudo -u builder pip3 install --upgrade pip --break-system-packages
+        sudo -u builder pip3 install cython virtualenv wheel setuptools --break-system-packages
+        sudo -u builder pip3 install git+https://github.com --break-system-packages
 
-    # 5. Запуск компиляции с обходом проверки root-прав
+    # 6. Запускаем компиляцию APK строго от имени пользователя builder (без вопросов про root)
     - name: Build Android APK
       run: |
-        # Заставляем билд идти без интерактивных вопросов про root
-        buildozer android debug || echo "Сборка завершилась, выводим лог ниже:"
-        
-        # Если билд упал, мы принудительно выводим последние 100 строк системного лога Buildozer
-        if [ ! -f bin/*.apk ]; then
-          echo "::error::--- КРИТИЧЕСКАЯ СБОРКА УПАЛА. ВЫВОД СИСТЕМНОГО ЖУРНАЛА: ---"
-          if [ -d .buildozer/android/platform/python-for-android ]; then
-            tail -n 100 .buildozer/config.ini 2>/dev/null || true
-          fi
-          # Если файл apk не появился, завершаем шаг ошибкой
-          exit 1
-        fi
+        sudo -u builder env "PATH=$PATH:/home/builder/.local/bin" buildozer android debug
 
-    # 6. Загружаем готовый APK-файл в раздел артефактов GitHub
+    # 7. Загружаем готовый APK-файл в раздел артефактов GitHub
     - name: Upload APK Artifact
       if: success()
       uses: actions/upload-artifact@v4
