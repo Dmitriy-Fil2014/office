@@ -1,4 +1,5 @@
 name: Build Local Office APK
+
 on:
   push:
     branches: [ "main" ]
@@ -8,11 +9,11 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-    # 1. Скачиваем чистый код проекта (включая подмодули, если они есть)
+    # 1. Скачиваем чистый код проекта
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: recursive
+        submodules: false
 
     # 2. Настраиваем Java 17 под стандарты Android API 34
     - name: Set up JDK 17
@@ -21,58 +22,41 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    # 3. Устанавливаем системные пакеты Linux
+    # 3. Устанавливаем системные пакеты Linux (включая инструменты для сборки Си-библиотек)
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake python3-venv openjdk-17-jdk wget clang
+        sudo apt-get install -y git zip unzip python3-pip autoconf automake libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libssl-dev cmake python3-venv
 
-    # 4. Создаем виртуальное окружение и устанавливаем зависимости
-    # Примечание: В GA каждый step — это новый shell, поэтому venv нужно активировать там, где он используется.
-    # Здесь мы просто создаем его и ставим пакеты.
-    - name: Setup Python Virtual Environment
+    # 4. Изолируем сборщик в виртуальном окружении venv, чтобы Node.js 24 не ломал его зависимости
+    - name: Install Buildozer in Virtual Env
       run: |
         python3 -m venv build_env
         source build_env/bin/activate
         pip install --upgrade pip wheel setuptools cython virtualenv
-        # Исправлена ссылка: установка стабильной версии buildozer вместо битой ссылки
-        pip install buildozer==1.5.0
+        pip install git+https://github.com
 
-    # 5. Запускаем компиляцию
+    # 5. Запускаем компиляцию с принудительным сохранением лога в файл
     - name: Build Android APK
       env:
         BUILDOZER_ALLOW_KIVY_BUILD_FROM_ROOT: 1
-        # Добавляем переменные окружения для Android SDK/NDK, если они не настроены автоматически плагином
-        ANDROID_HOME: ${{ env.ANDROID_HOME }}
       run: |
         source build_env/bin/activate
-        
-        # Инициализация Android SDK через buildozer (если нужно)
-        # buildozer android sdk accept_licenses 
-        
-        # Запускаем билд и логируем вывод
+        # Запускаем билд и перенаправляем весь поток (и ошибки, и дебаг) в один файл log.txt
         buildozer android debug 2>&1 | tee build_log.txt || true
         
-        # Проверка наличия APK. Используем find для надежного поиска любого .apk в bin/
-        apk_path=$(find bin -name "*.apk" -type f | head -n 1)
-        
-        if [ -z "$apk_path" ]; then
+        # Проверяем, создался ли APK файл
+        if [ ! -f bin/*.apk ]; then
           echo "::error::--- КРИТИЧЕСКИЙ СБОЙ КОМПИЛЯТОРА СИ-РЕЦЕПТОВ ---"
-          echo "::error::APK файл не был создан."
           echo "::error::Ниже выведены последние 60 строк детального внутреннего лога Buildozer:"
           tail -n 60 build_log.txt | while read -r line; do echo "::error::$line"; done
           exit 1
         fi
-        
-        echo "APK успешно создан: $apk_path"
-        # Сохраняем путь в файл для следующего шага, так как переменные между шагами не передаются напрямую
-        echo "$apk_path" > apk_path.txt
 
-    # 6. Загружаем готовый APK-файл
+    # 6. Загружаем готовый APK-файл в раздел артефактов GitHub
     - name: Upload APK Artifact
       if: success()
       uses: actions/upload-artifact@v4
       with:
         name: Local-Office-APK
-        # Читаем путь из файла, созданного в предыдущем шаге, или используем wildcard, который теперь безопасен
         path: bin/*.apk
