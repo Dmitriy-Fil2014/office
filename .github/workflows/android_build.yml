@@ -1,33 +1,39 @@
+name: Local Office Android APK
 
-      - name: Always create diagnostic report
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p diagnostic
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-          if [ -f build_log.txt ]; then
-            {
-              echo "=== BUILD ERRORS ==="
-              grep -in -B 5 -A 10 -E \
-                'error:|fatal error|exception|traceback|failed|failure|LT_SYS_SYMBOL_USCORE|undefined macro|license|permission denied|not found|timed out' \
-                build_log.txt | tail -n 120 || true
+permissions:
+  contents: read
 
-              echo
-              echo "=== LAST 80 LINES ==="
-              tail -n 80 build_log.txt
-            } > diagnostic/error_summary.txt
-          else
-            echo "build_log.txt was not created." > diagnostic/error_summary.txt
-          fi
+env:
+  BUILDOZER_WARN_ON_ROOT: '0'
 
-          ls -lah diagnostic
-          cat diagnostic/error_summary.txt
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
 
-      - name: Upload diagnostic report
-        if: always()
-        uses: actions/upload-artifact@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          name: Local-Office-Diagnostic
-          path: diagnostic/error_summary.txt
-          if-no-files-found: error
-          retention-days: 3
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y
