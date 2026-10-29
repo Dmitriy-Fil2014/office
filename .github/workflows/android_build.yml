@@ -1,29 +1,29 @@
 
+      
       - name: Build debug APK
         shell: bash
         run: |
+          mkdir -p artifacts
+          echo "Build has not started" > error_summary.txt
+          touch build_log.txt
+
           set +e
           source "$RUNNER_TEMP/build_env/bin/activate"
-
           buildozer -v android debug > build_log.txt 2>&1
           result=$?
-
-          echo "Build exit code: $result"
+          set -e
 
           {
             echo "BUILD EXIT CODE: $result"
-            echo ""
-            echo "=== ERROR MATCHES ==="
-            grep -in -B 5 -A 10 -E \
-              'error:|fatal error|exception|traceback|failed|failure|undefined macro|LT_SYS_SYMBOL_USCORE|license|permission denied|no such file|not found|timed out|could not|cannot' \
-              build_log.txt | tail -n 160 || true
+            echo "=== ERROR LINES ==="
+            grep -in -B 4 -A 8 -E \
+              'error:|fatal error|exception|traceback|failed|failure|undefined macro|LT_SYS_SYMBOL_USCORE|license|permission denied|not found|timed out|could not|cannot' \
+              build_log.txt | tail -n 100 || true
 
-            echo ""
-            echo "=== LAST 80 LINES ==="
-            tail -n 80 build_log.txt
+            echo
+            echo "=== LAST 60 LINES ==="
+            tail -n 60 build_log.txt
           } > error_summary.txt
-
-          cat error_summary.txt
 
           if [ "$result" -ne 0 ]; then
             exit "$result"
@@ -37,16 +37,17 @@
             exit 1
           fi
 
-          mkdir -p artifacts
           cp "${apks[@]}" artifacts/
 
-      - name: Upload error summary
+      - name: Upload diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Office-Error-Summary
-          path: error_summary.txt
-          if-no-files-found: ignore
+          name: Local-Office-Diagnostic
+          path: |
+            error_summary.txt
+            build_log.txt
+          if-no-files-found: warn
           retention-days: 3
 
       - name: Upload APK
@@ -56,3 +57,4 @@
           name: Local-Office-APK
           path: artifacts/*.apk
           if-no-files-found: error
+          retention-days: 7
