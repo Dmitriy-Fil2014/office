@@ -36,4 +36,64 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git zip unzip curl wget \
+            autoconf automake autopoint libtool libtool-bin \
+            pkg-config cmake gettext \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libffi-dev libssl-dev libsqlite3-dev \
+            libxml2-dev libxslt1-dev
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install 'buildozer==1.5.0' 'Cython==0.29.36'
+
+      - name: Check project files
+        run: |
+          test -f buildozer.spec || { echo 'ERROR: buildozer.spec must be in the repository root.'; exit 1; }
+          echo 'Project files:'
+          ls -la
+
+      - name: Build debug APK
+        id: build
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build-report
+          set +e
+          BUILDOZER_ALLOW_KIVY_BUILD_FROM_ROOT=1 \
+            buildozer -v android debug 2>&1 | tee build-report/build.log
+          result=${PIPESTATUS[0]}
+          set -e
+          echo "exit_code=$result" >> "$GITHUB_OUTPUT"
+          if [ "$result" -ne 0 ]; then
+            echo 'Buildozer failed. The last 100 log lines follow:'
+            tail -n 100 build-report/build.log
+            exit "$result"
+          fi
+          shopt -s nullglob
+          apks=(bin/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo 'ERROR: Buildozer returned success but no APK was found in bin/.'
+            exit 1
+          fi
+          printf 'APK created: %s\n' "${apks[@]}"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-Office-Build-Log
+          path: build-report/build.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-Office-APK
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 7
