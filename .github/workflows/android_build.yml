@@ -1,8 +1,9 @@
-buildname: Build Local Office APK
+
+name: Build Local Office APK
 
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,121 +12,162 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     env:
       BUILDOZER_ALLOW_KIVY_BUILD_FROM_ROOT: "1"
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-      ACLOCAL_PATH: "/usr/share/aclocal"
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: Checkout
+        uses: actions/checkout@v7
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
+      - name: Install Java 17
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Python
+      - name: Install Python 3.12
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Install Linux build dependencies
+      - name: Install system dependencies
         run: |
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip \
+            build-essential git zip unzip patch \
             autoconf automake autopoint m4 \
             libtool libtool-bin libltdl-dev \
             pkg-config cmake gettext \
             zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo6 libffi-dev libssl-dev
+            libtinfo6 libffi-dev libssl-dev \
+            libsqlite3-dev
 
       - name: Install Buildozer
         shell: bash
         run: |
-          set -euo pipefail
-          python -m venv build_env
-          source build_env/bin/activate
+          set -euxo pipefail
+          python -m venv "$RUNNER_TEMP/build_env"
+          source "$RUNNER_TEMP/build_env/bin/activate"
+
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython==0.29.36" buildozer
+          python -m pip install "Cython==0.29.34" buildozer
+
+          python --version
+          java -version
           buildozer --version
 
-      - name: Configure SDK license acceptance
+      - name: Configure buildozer.spec
         shell: bash
         run: |
           set -euo pipefail
           test -f buildozer.spec
+
           python - <<'PY'
           from pathlib import Path
           import re
-          path = Path("buildozer.spec")
-          text = path.read_text()
-          app = re.search(r"(?m)^
-$$
-app
-$$
-\s*$", text)
-          if not app:
-              raise SystemExit("ERROR: [app] section missing")
-          following = re.search(r"(?m)^
-$$
-.+
-$$
-\s*$", text[app.end():])
-          end = app.end() + following.start() if following else len(text)
-          section = text[app.end():end]
+
+          p = Path("buildozer.spec")
+          text = p.read_text()
+
+          match = re.search(r"(?m)^\[app\][ \t]*$", text)
+          if not match:
+              raise SystemExit("ERROR: [app] section not found")
+
+          next_section = re.search(
+              r"(?m)^\[[^]]+\][ \t]*$",
+              text[match.end():]
+          )
+          end = (
+              match.end() + next_section.start()
+              if next_section else len(text)
+          )
+
+          section = text[match.end():end]
           key = r"(?m)^[ \t]*android\.accept_sdk_license[ \t]*=.*$"
+
           if re.search(key, section):
-              section = re.sub(key, "android.accept_sdk_license = True", section)
+              section = re.sub(
+                  key,
+                  "android.accept_sdk_license = True",
+                  section
+              )
           else:
-              section += "\nandroid.accept_sdk_license = True\n"
-          path.write_text(text[:app.end()] + section + text[end:])
-          print("Configured SDK license acceptance in [app].")
+              section = section.rstrip() + (
+                  "\nandroid.accept_sdk_license = True\n"
+              )
+
+          p.write_text(text[:match.end()] + section + text[end:])
           PY
 
-      - name: Build Android debug APK
+          grep -n "android.accept_sdk_license" buildozer.spec
+
+      - name: Prepare Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/build_env/bin/activate"
+
+          # Скачиваем/подготавливаем инструменты python-for-android.
+          buildozer android p4a -- --help
+
+      - name: Build debug APK
         shell: bash
         run: |
           set -uo pipefail
-          source build_env/bin/activate
-
-          # Полная чистка кэша, чтобы битый aclocal.m4 из
-          # предыдущих неудачных прогонов не мешал сборке
-          buildozer appclean || true
-          rm -rf ~/.buildozer/android/platform/build-* .buildozer
+          source "$RUNNER_TEMP/build_env/bin/activate"
 
           set +e
-          export ACLOCAL_PATH=/usr/share/aclocal:/usr/local/share/aclocal
           buildozer -v android debug 2>&1 | tee build_log.txt
-          status=${PIPESTATUS[0]}
+          result=${PIPESTATUS[0]}
           set -e
 
-          if [ "$status" -ne 0 ]; then
-            echo "::error::Buildozer failed with exit code $status"
-            echo "----- Final build log -----"
-            tail -n 100 build_log.txt
-            exit "$status"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Android compilation failed: exit $result"
+
+            echo "===== Native build errors ====="
+            grep -n -B 10 -A 15 -E \
+              'LT_SYS_SYMBOL_USCORE|autoreconf: error|configure: error|fatal error:|error:|Exception|Traceback' \
+              build_log.txt | tail -n 200 || true
+
+            echo "===== Last 120 log lines ====="
+            tail -n 120 build_log.txt
+            exit "$result"
           fi
 
           shopt -s nullglob
           apks=(bin/*.apk)
+
           if [ "${#apks[@]}" -eq 0 ]; then
-            echo "::error::No APK was generated in bin/"
+            echo "::error::Build succeeded but no APK exists in bin/"
             exit 1
           fi
+
           mkdir -p artifacts
           cp "${apks[@]}" artifacts/
+          ls -lh artifacts/
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Local-Office-APK
           path: artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: Local-Office-Build-Log
+          path: build_log.txt
+          if-no-files-found: ignore
+          retention-days: 7
