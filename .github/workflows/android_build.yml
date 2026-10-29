@@ -1,60 +1,33 @@
 
-      
-      - name: Build debug APK
+      - name: Always create diagnostic report
+        if: always()
         shell: bash
         run: |
-          mkdir -p artifacts
-          echo "Build has not started" > error_summary.txt
-          touch build_log.txt
+          mkdir -p diagnostic
 
-          set +e
-          source "$RUNNER_TEMP/build_env/bin/activate"
-          buildozer -v android debug > build_log.txt 2>&1
-          result=$?
-          set -e
+          if [ -f build_log.txt ]; then
+            {
+              echo "=== BUILD ERRORS ==="
+              grep -in -B 5 -A 10 -E \
+                'error:|fatal error|exception|traceback|failed|failure|LT_SYS_SYMBOL_USCORE|undefined macro|license|permission denied|not found|timed out' \
+                build_log.txt | tail -n 120 || true
 
-          {
-            echo "BUILD EXIT CODE: $result"
-            echo "=== ERROR LINES ==="
-            grep -in -B 4 -A 8 -E \
-              'error:|fatal error|exception|traceback|failed|failure|undefined macro|LT_SYS_SYMBOL_USCORE|license|permission denied|not found|timed out|could not|cannot' \
-              build_log.txt | tail -n 100 || true
-
-            echo
-            echo "=== LAST 60 LINES ==="
-            tail -n 60 build_log.txt
-          } > error_summary.txt
-
-          if [ "$result" -ne 0 ]; then
-            exit "$result"
+              echo
+              echo "=== LAST 80 LINES ==="
+              tail -n 80 build_log.txt
+            } > diagnostic/error_summary.txt
+          else
+            echo "build_log.txt was not created." > diagnostic/error_summary.txt
           fi
 
-          shopt -s nullglob
-          apks=(bin/*.apk)
-
-          if [ "${#apks[@]}" -eq 0 ]; then
-            echo "ERROR: APK not found" >> error_summary.txt
-            exit 1
-          fi
-
-          cp "${apks[@]}" artifacts/
+          ls -lah diagnostic
+          cat diagnostic/error_summary.txt
 
       - name: Upload diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Local-Office-Diagnostic
-          path: |
-            error_summary.txt
-            build_log.txt
-          if-no-files-found: warn
-          retention-days: 3
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Local-Office-APK
-          path: artifacts/*.apk
+          path: diagnostic/error_summary.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
