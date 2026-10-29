@@ -18,6 +18,8 @@ jobs:
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      # ВАЖНО: Указываем автоконфигуратору точный глобальный путь к макросам libtool
+      ACLOCAL_PATH: "/usr/share/aclocal"
 
     steps:
       - name: Checkout code
@@ -81,10 +83,12 @@ jobs:
           print("Configured SDK license acceptance in [app].")
           PY
 
-      # ВАЖНО: Патчим макросы Autotools перед компиляцией C-библиотек
+      # ВАЖНО: Копируем файлы макросов libtool во все директории поиска aclocal и autoconf
       - name: Fix Autotools Macro M4
         run: |
-          sudo ln -s /usr/share/aclocal/libtool.m4 /usr/share/aclocal/ltoptions.m4 /usr/share/aclocal/ltsugar.m4 /usr/share/aclocal/ltversion.m4 /usr/share/aclocal/lt~obsolete.m4 /usr/share/autoconf/ 2>/dev/null || true
+          sudo cp /usr/share/aclocal/libtool.m4 /usr/share/aclocal/ltoptions.m4 /usr/share/aclocal/ltsugar.m4 /usr/share/aclocal/ltversion.m4 /usr/share/aclocal/lt~obsolete.m4 /usr/share/autoconf/ 2>/dev/null || true
+          sudo mkdir -p /usr/local/share/aclocal
+          sudo cp /usr/share/aclocal/*.m4 /usr/local/share/aclocal/ 2>/dev/null || true
 
       - name: Build Android debug APK
         shell: bash
@@ -97,6 +101,8 @@ jobs:
           }
 
           set +e
+          # Передаем ACLOCAL_PATH напрямую в окружение выполнения
+          export ACLOCAL_PATH=/usr/share/aclocal:/usr/local/share/aclocal
           buildozer -v android debug 2>&1 | tee build_log.txt
           status=${PIPESTATUS[0]}
           set -e
