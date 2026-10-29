@@ -46,20 +46,14 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             libtinfo6 libffi-dev libssl-dev
 
-          autoreconf --version
-          libtoolize --version
-          aclocal --version
-
       - name: Install Buildozer
         shell: bash
         run: |
           set -euo pipefail
           python -m venv build_env
           source build_env/bin/activate
-
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython==0.29.36" buildozer
-
           buildozer --version
 
       - name: Configure SDK license acceptance
@@ -67,36 +61,30 @@ jobs:
         run: |
           set -euo pipefail
           test -f buildozer.spec
-
           python - <<'PY'
           from pathlib import Path
           import re
-
           path = Path("buildozer.spec")
           text = path.read_text()
-
           app = re.search(r"(?m)^\[app\]\s*$", text)
           if not app:
               raise SystemExit("ERROR: [app] section missing")
-
-          following = re.search(
-              r"(?m)^\[.+\]\s*$", text[app.end():]
-          )
+          following = re.search(r"(?m)^\[.+\]\s*$", text[app.end():])
           end = app.end() + following.start() if following else len(text)
-
           section = text[app.end():end]
           key = r"(?m)^[ \t]*android\.accept_sdk_license[ \t]*=.*$"
-
           if re.search(key, section):
-              section = re.sub(
-                  key, "android.accept_sdk_license = True", section
-              )
+              section = re.sub(key, "android.accept_sdk_license = True", section)
           else:
               section += "\nandroid.accept_sdk_license = True\n"
-
           path.write_text(text[:app.end()] + section + text[end:])
           print("Configured SDK license acceptance in [app].")
           PY
+
+      # ВАЖНО: Патчим макросы Autotools перед компиляцией C-библиотек
+      - name: Fix Autotools Macro M4
+        run: |
+          sudo ln -s /usr/share/aclocal/libtool.m4 /usr/share/aclocal/ltoptions.m4 /usr/share/aclocal/ltsugar.m4 /usr/share/aclocal/ltversion.m4 /usr/share/aclocal/lt~obsolete.m4 /usr/share/autoconf/ 2>/dev/null || true
 
       - name: Build Android debug APK
         shell: bash
@@ -115,12 +103,6 @@ jobs:
 
           if [ "$status" -ne 0 ]; then
             echo "::error::Buildozer failed with exit code $status"
-
-            echo "----- Autotools / libtool diagnostics -----"
-            grep -n -B 8 -A 12 -E \
-              'LT_SYS_SYMBOL_USCORE|possibly undefined macro|autoreconf: error|configure: error|error:' \
-              build_log.txt | tail -n 160 || true
-
             echo "----- Final build log -----"
             tail -n 100 build_log.txt
             exit "$status"
@@ -128,18 +110,13 @@ jobs:
 
           shopt -s nullglob
           apks=(bin/*.apk)
-
           if [ "${#apks[@]}" -eq 0 ]; then
             echo "::error::No APK was generated in bin/"
-            tail -n 100 build_log.txt
             exit 1
           fi
-
           mkdir -p artifacts
           cp "${apks[@]}" artifacts/
-          ls -lh artifacts/
 
-      # ФИНАЛ: Загружаем готовый APK в артефакты (этот шаг был оборван в исходном тексте)
       - name: Upload APK Artifact
         if: success()
         uses: actions/upload-artifact@v4
