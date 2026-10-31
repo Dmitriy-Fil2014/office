@@ -6,12 +6,12 @@ version = 1.0.2
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,txt
 icon.filename = app_icon.png
-presplash.filename = app_icon.png
+# Native icon presplash disabled; the app displays its own animated loading screen.
 orientation = portrait
 p4a.branch = v2024.01.21
 # sqlite3 is included with Python; python-for-android supplies hostpython3.
 # lxml 4.9.3 supports Python 3.11 and retains the static build env used by p4a.
-requirements = python3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,python-pptx,lxml==4.9.3
+requirements = python3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,python-pptx,lxml==4.9.3,typing_extensions==4.12.2
 # Files are selected through Android's system document picker (Storage Access Framework).
 # It grants access only to files the user chooses; broad storage permissions are unnecessary.
 android.api = 34
