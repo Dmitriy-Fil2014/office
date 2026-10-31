@@ -23,7 +23,9 @@ class DocumentProcessor:
             Workbook().save(output)
         elif file_format == "pptx":
             presentation = Presentation()
-            presentation.slides.add_slide(presentation.slide_layouts[6])
+            slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+            box = slide.shapes.add_textbox(914400, 914400, 7315200, 1828800)
+            box.text_frame.text = "Введите текст слайда"
             presentation.save(output)
         else:
             raise ValueError("Неизвестный формат документа")
@@ -219,7 +221,7 @@ class DocumentProcessor:
             for shape in slide.shapes:
                 if getattr(shape, "has_text_frame", False):
                     paragraphs.extend(shape.text_frame.paragraphs)
-        lines = new_text.split("\n")
+        lines = [line for line in new_text.split("\n") if not line.strip().startswith("[Слайд ")]
         for index, paragraph in enumerate(paragraphs):
             value = lines[index] if index < len(lines) else ""
             if paragraph.runs:
