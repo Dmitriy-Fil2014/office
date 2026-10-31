@@ -210,17 +210,7 @@ class DocumentLocalApp(MDApp):
         self.consent_dialog.open()
 
     def view_doc_from_consent(self, filename, title_text):
-        self.dialog = MDDialog(
-            title=title_text,
-            text=self.load_local_text(filename),
-            buttons=[
-                MDFlatButton(
-                    text="ЗАКРЫТЬ ТЕКСТ",
-                    on_release=lambda x: self.dialog.dismiss(),
-                )
-            ],
-        )
-        self.dialog.open()
+        self.show_legal_doc(filename, title_text)
 
     def accept_legal_agreements(self, instance):
         self.config.set("General", "accepted_legal", "1")
