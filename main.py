@@ -2,6 +2,7 @@ from kivy.utils import platform
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.clock import Clock
+from kivy.uix.label import Label
 import traceback
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton, MDFillRoundFlatButton
@@ -24,9 +25,19 @@ class DocumentLocalApp(MDApp):
         self.config.setdefaults("General", {"accepted_legal": "0"})
         try:
             return Builder.load_file("app.kv")
-        except Exception:
+        except Exception as exc:
             self._write_startup_error("Ошибка загрузки интерфейса")
-            raise
+            # Keep the process alive and show a readable diagnostic instead
+            # of leaving the user with a black screen and an immediate exit.
+            return Label(
+                text=(
+                    "Local Office: не удалось загрузить интерфейс.\\n"
+                    "Ошибка записана в local_office_startup.log\\n\\n"
+                    + str(exc)
+                ),
+                halign="center",
+                valign="middle",
+            )
 
     def on_start(self):
         Clock.schedule_once(self._finish_startup, 0.5)
