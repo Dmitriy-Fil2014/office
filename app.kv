@@ -1,44 +1,72 @@
 MDScreen:
-    md_bg_color: app.theme_cls.bg_normal
+    md_bg_color: 0.95, 0.97, 1, 1
 
     FloatLayout:
         MDBoxLayout:
             orientation: "vertical"
             padding: "16dp"
-            spacing: "12dp"
+            spacing: "14dp"
 
             MDTopAppBar:
                 title: "Лист"
-                elevation: 3
-                right_action_items: [["cog", lambda x: app.show_settings_menu()], ["information-outline", lambda x: app.show_info_menu()]]
+                elevation: 0
+                md_bg_color: 0.95, 0.97, 1, 1
+                specific_text_color: 0.10, 0.18, 0.30, 1
+                right_action_items: [["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
 
             MDCard:
                 orientation: "vertical"
-                padding: "14dp"
-                spacing: "5dp"
+                padding: "18dp"
+                spacing: "6dp"
                 size_hint_y: None
-                height: "76dp"
-                radius: [18, 18, 18, 18]
-                elevation: 1
+                height: "112dp"
+                radius: [22, 22, 22, 22]
+                elevation: 2
+                md_bg_color: 1, 1, 1, 1
+
                 MDLabel:
-                    text: "Ваши документы"
+                    text: "Ваше рабочее пространство"
                     font_style: "H6"
                     bold: True
+                    theme_text_color: "Custom"
+                    text_color: 0.10, 0.18, 0.30, 1
                     size_hint_y: None
-                    height: "28dp"
+                    height: "34dp"
+
                 MDLabel:
                     id: status_label
-                    text: "Создавайте и редактируйте файлы прямо на телефоне"
-                    theme_text_color: "Secondary"
-                    font_style: "Caption"
+                    text: "Создавайте и редактируйте документы на устройстве"
+                    theme_text_color: "Custom"
+                    text_color: 0.35, 0.42, 0.52, 1
+                    font_style: "Body2"
                     size_hint_y: None
-                    height: "24dp"
+                    height: "42dp"
 
             MDCard:
                 orientation: "vertical"
-                padding: "8dp"
-                radius: [18, 18, 18, 18]
-                elevation: 1
+                padding: "12dp"
+                radius: [22, 22, 22, 22]
+                elevation: 2
+                md_bg_color: 1, 1, 1, 1
+
+                MDBoxLayout:
+                    orientation: "horizontal"
+                    size_hint_y: None
+                    height: "36dp"
+                    spacing: "8dp"
+                    MDIcon:
+                        icon: "file-edit-outline"
+                        theme_text_color: "Custom"
+                        text_color: 0.12, 0.48, 0.88, 1
+                        size_hint_x: None
+                        width: "28dp"
+                    MDLabel:
+                        text: "Редактор документов"
+                        font_style: "Subtitle1"
+                        bold: True
+                        theme_text_color: "Custom"
+                        text_color: 0.10, 0.18, 0.30, 1
+
                 ScrollView:
                     do_scroll_x: False
                     do_scroll_y: True
@@ -49,26 +77,32 @@ MDScreen:
                         multiline: True
                         mode: "rectangle"
                         size_hint_y: None
-                        height: max(self.minimum_height, root.height * 0.55)
-                        hint_text: "Текст документа появится здесь…"
+                        height: max(self.minimum_height, root.height * 0.56)
+                        hint_text: "Откройте документ или создайте новый…"
                         font_size: "16sp"
+                        line_color_focus: 0.12, 0.48, 0.88, 1
 
             MDBoxLayout:
                 orientation: "horizontal"
                 spacing: "8dp"
                 size_hint_y: None
-                height: "52dp"
+                height: "54dp"
+
                 MDFillRoundFlatIconButton:
                     text: "Создать"
-                    icon: "plus"
+                    icon: "plus-circle"
                     on_release: app.show_new_document_menu()
                     size_hint_x: 0.33
+                    md_bg_color: 0.12, 0.48, 0.88, 1
+
                 MDFillRoundFlatIconButton:
                     id: open_btn
                     text: "Открыть"
                     icon: "folder-open"
                     on_release: app.open_system_storage()
                     size_hint_x: 0.33
+                    md_bg_color: 0.16, 0.60, 0.68, 1
+
                 MDFillRoundFlatIconButton:
                     id: save_btn
                     text: "Сохранить"
@@ -76,6 +110,7 @@ MDScreen:
                     on_release: app.save_changes_to_storage()
                     disabled: True
                     size_hint_x: 0.34
+                    md_bg_color: 0.30, 0.38, 0.52, 1
 
         MDCard:
             id: splash_layer
@@ -87,7 +122,7 @@ MDScreen:
             size_hint: 1, 1
             pos: 0, 0
             opacity: 1
-            md_bg_color: app.theme_cls.primary_color
+            md_bg_color: 0.08, 0.32, 0.66, 1
             Widget:
                 size_hint_y: 1
             MDLabel:
@@ -101,7 +136,7 @@ MDScreen:
                 height: "64dp"
             MDSpinner:
                 size_hint: None, None
-                size: "42dp", "42dp"
+                size: "46dp", "46dp"
                 pos_hint: {"center_x": 0.5}
                 active: True
                 color: 1, 1, 1, 1
@@ -109,7 +144,7 @@ MDScreen:
                 text: "Загрузка"
                 halign: "center"
                 theme_text_color: "Custom"
-                text_color: 1, 1, 1, 0.9
+                text_color: 1, 1, 1, 0.94
                 font_style: "Subtitle1"
                 size_hint_y: None
                 height: "34dp"
