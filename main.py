@@ -4,6 +4,7 @@ from kivy.lang import Builder
 from kivy.clock import Clock
 from kivy.uix.label import Label
 import traceback
+import locale
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton, MDFillRoundFlatButton
 from document_core import DocumentProcessor
@@ -22,7 +23,7 @@ class DocumentLocalApp(MDApp):
     current_file_bytes = b""
 
     def build(self):
-        self.config.setdefaults("General", {"accepted_legal": "0"})
+        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "system"})
         try:
             return Builder.load_file("app.kv")
         except Exception as exc:
@@ -40,7 +41,70 @@ class DocumentLocalApp(MDApp):
             )
 
     def on_start(self):
+        self.apply_preferences()
         Clock.schedule_once(self._finish_startup, 0.5)
+
+    def _system_theme(self):
+        if platform == "android":
+            try:
+                Configuration = autoclass("android.content.res.Configuration")
+                act = autoclass("org.kivy.android.PythonActivity").mActivity
+                mode = act.getResources().getConfiguration().uiMode
+                return "Dark" if (mode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES else "Light"
+            except Exception:
+                pass
+        return "Light"
+
+    def _system_language(self):
+        try:
+            return "en" if (locale.getlocale()[0] or "ru").lower().startswith("en") else "ru"
+        except Exception:
+            return "ru"
+
+    def apply_preferences(self):
+        mode = self.config.get("General", "theme_mode")
+        self.theme_cls.theme_style = self._system_theme() if mode == "system" else ("Dark" if mode == "dark" else "Light")
+        lang = self.config.get("General", "language")
+        self.language = self._system_language() if lang == "system" else lang
+        self._refresh_language()
+
+    def _refresh_language(self):
+        en = getattr(self, "language", "ru") == "en"
+        try:
+            self.root.ids.status_label.text = "Choose a file. Changes overwrite the document." if en else "Выберите файл. Изменения перезапишут документ."
+            self.root.ids.open_btn.text = "OPEN FILE" if en else "ОТКРЫТЬ ФАЙЛ"
+            self.root.ids.save_btn.text = "SAVE" if en else "СОХРАНИТЬ"
+            self.root.ids.file_content_view.hint_text = "Document text will appear here" if en else "Содержимое документа отобразится здесь"
+        except Exception:
+            pass
+
+    def set_theme_mode(self, mode):
+        self.config.set("General", "theme_mode", mode)
+        self.config.write()
+        self.apply_preferences()
+        if self.dialog: self.dialog.dismiss()
+
+    def set_language(self, language):
+        self.config.set("General", "language", language)
+        self.config.write()
+        self.apply_preferences()
+        if self.dialog: self.dialog.dismiss()
+
+    def show_settings_menu(self):
+        en = getattr(self, "language", "ru") == "en"
+        self.dialog = MDDialog(
+            title="Settings" if en else "Настройки",
+            text="Choose theme and language" if en else "Выберите тему и язык приложения.",
+            buttons=[
+                MDFlatButton(text="SYSTEM THEME" if en else "СИСТЕМНАЯ ТЕМА", on_release=lambda x: self.set_theme_mode("system")),
+                MDFlatButton(text="DARK" if en else "ТЁМНАЯ", on_release=lambda x: self.set_theme_mode("dark")),
+                MDFlatButton(text="LIGHT" if en else "СВЕТЛАЯ", on_release=lambda x: self.set_theme_mode("light")),
+                MDFlatButton(text="РУССКИЙ", on_release=lambda x: self.set_language("ru")),
+                MDFlatButton(text="ENGLISH", on_release=lambda x: self.set_language("en")),
+                MDFlatButton(text="SYSTEM LANG" if en else "ЯЗЫК СИСТЕМЫ", on_release=lambda x: self.set_language("system")),
+            ],
+        )
+        self.dialog.open()
 
     def _write_startup_error(self, title):
         try:
@@ -128,6 +192,7 @@ class DocumentLocalApp(MDApp):
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/pdf",
                 "text/plain",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             ]
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mime_types)
             activity.bind(on_activity_result=self.on_file_selected)
@@ -222,6 +287,7 @@ class DocumentLocalApp(MDApp):
                 "docx": DocumentProcessor.read_word_bytes,
                 "xlsx": DocumentProcessor.read_excel_bytes,
                 "pdf": DocumentProcessor.read_pdf_bytes,
+                "pptx": DocumentProcessor.read_pptx_bytes,
             }
             text = readers[self.current_file_format](self.current_file_bytes)
             self.root.ids.file_content_view.text = text
@@ -251,6 +317,9 @@ class DocumentLocalApp(MDApp):
                     self.current_file_bytes, new_text
                 ),
                 "pdf": lambda: DocumentProcessor.modify_pdf_bytes(
+                    self.current_file_bytes, new_text
+                ),
+                "pptx": lambda: DocumentProcessor.modify_pptx_bytes(
                     self.current_file_bytes, new_text
                 ),
             }
