@@ -2,6 +2,7 @@ from kivy.utils import platform
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.clock import Clock
+from kivy.animation import Animation
 from kivy.uix.label import Label
 import traceback
 import locale
@@ -47,7 +48,17 @@ class DocumentLocalApp(MDApp):
             self.apply_preferences()
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
-        Clock.schedule_once(self._finish_startup, 1.0)
+        Clock.schedule_once(self._finish_startup, 0.65)
+        Clock.schedule_once(self._hide_splash, 0.75)
+
+    def _hide_splash(self, _dt):
+        try:
+            layer = self.root.ids.splash_layer
+            animation = Animation(opacity=0, duration=0.28)
+            animation.bind(on_complete=lambda *_: self.root.remove_widget(layer))
+            animation.start(layer)
+        except Exception:
+            pass
 
     def _install_exception_hook(self):
         if getattr(self, "_exception_hook_installed", False):
