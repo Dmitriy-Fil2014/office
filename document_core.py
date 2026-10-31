@@ -141,15 +141,14 @@ class DocumentProcessor:
             sheet = workbook.active
             for row in sheet.iter_rows():
                 for cell in row:
-                    cell.value = None
+                    if cell.__class__.__name__ != "MergedCell":
+                        cell.value = None
 
             for row_index, line in enumerate(new_text.split("\n"), start=1):
                 for column_index, value in enumerate(line.split(" | "), start=1):
-                    sheet.cell(
-                        row=row_index,
-                        column=column_index,
-                        value=DocumentProcessor._parse_excel_value(value),
-                    )
+                    target = sheet.cell(row=row_index, column=column_index)
+                    if target.__class__.__name__ != "MergedCell":
+                        target.value = DocumentProcessor._parse_excel_value(value)
 
             output = io.BytesIO()
             workbook.save(output)
