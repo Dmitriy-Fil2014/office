@@ -4,6 +4,11 @@ from kivy.lang import Builder
 from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.uix.label import Label
+from kivy.uix.modalview import ModalView
+from kivy.uix.scrollview import ScrollView
+from kivymd.uix.card import MDCard
+from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.label import MDLabel
 import traceback
 import locale
 import sys
@@ -26,6 +31,8 @@ class DocumentLocalApp(MDApp):
     pending_create_bytes = b""
 
     def build(self):
+        self.theme_cls.primary_palette = "Blue"
+        self.theme_cls.accent_palette = "LightBlue"
         self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "system"})
         try:
             return Builder.load_file("app.kv")
@@ -55,8 +62,12 @@ class DocumentLocalApp(MDApp):
     def _hide_splash(self, _dt):
         try:
             layer = self.root.ids.splash_layer
-            animation = Animation(opacity=0, duration=0.28)
-            animation.bind(on_complete=lambda *_: self.root.remove_widget(layer))
+            animation = Animation(opacity=0, duration=0.28, t="out_quad")
+            def remove_splash(*_):
+                parent = layer.parent
+                if parent is not None:
+                    parent.remove_widget(layer)
+            animation.bind(on_complete=remove_splash)
             animation.start(layer)
         except Exception:
             pass
@@ -489,17 +500,53 @@ class DocumentLocalApp(MDApp):
     def show_legal_doc(self, filename, title_text):
         if self.dialog:
             self.dialog.dismiss()
-        self.dialog = MDDialog(
-            title=title_text,
-            text=self.load_local_text(filename),
-            buttons=[
-                MDFlatButton(
-                    text="ОК",
-                    on_release=lambda x: self.dialog.dismiss(),
-                )
-            ],
+        if getattr(self, "legal_view", None):
+            self.legal_view.dismiss()
+
+        modal = ModalView(
+            size_hint=(0.92, 0.84),
+            auto_dismiss=True,
+            background_color=(0, 0, 0, 0.55),
         )
-        self.dialog.open()
+        card = MDCard(
+            orientation="vertical",
+            padding="18dp",
+            spacing="12dp",
+            radius=[24, 24, 24, 24],
+            elevation=8,
+            md_bg_color=self.theme_cls.bg_normal,
+        )
+        heading = MDLabel(
+            text=title_text,
+            font_style="H6",
+            bold=True,
+            size_hint_y=None,
+            height="38dp",
+            theme_text_color="Primary",
+        )
+        scroll = ScrollView(do_scroll_x=False, bar_width="3dp")
+        body = MDLabel(
+            text=self.load_local_text(filename),
+            size_hint_y=None,
+            halign="left",
+            valign="top",
+            theme_text_color="Primary",
+            font_size="14sp",
+        )
+        body.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
+        body.bind(texture_size=lambda widget, size: setattr(widget, "height", size[1] + 12))
+        scroll.add_widget(body)
+        close_button = MDFillRoundFlatButton(
+            text="ПОНЯТНО",
+            pos_hint={"center_x": 0.5},
+            on_release=lambda *_: modal.dismiss(),
+        )
+        card.add_widget(heading)
+        card.add_widget(scroll)
+        card.add_widget(close_button)
+        modal.add_widget(card)
+        self.legal_view = modal
+        modal.open()
 
 
 if __name__ == "__main__":
