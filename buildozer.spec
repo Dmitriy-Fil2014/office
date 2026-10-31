@@ -14,7 +14,7 @@ requirements = python3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,lxml
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 android.api = 34
 android.minapi = 21
-android.archs = arm64-v8a
+android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
 
 [buildozer]
