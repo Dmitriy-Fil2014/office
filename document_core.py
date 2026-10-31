@@ -7,6 +7,7 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 from openpyxl import load_workbook
 from pypdf import PdfReader, PdfWriter
+from pptx import Presentation
 
 
 class DocumentProcessor:
@@ -18,6 +19,7 @@ class DocumentProcessor:
             ".docx": "docx",
             ".xlsx": "xlsx",
             ".pdf": "pdf",
+            ".pptx": "pptx",
         }
         if extension in by_extension:
             return by_extension[extension]
@@ -26,11 +28,12 @@ class DocumentProcessor:
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
             "application/pdf": "pdf",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
         }
         if mime_type in by_mime:
             return by_mime[mime_type]
         raise ValueError(
-            "Формат не поддерживается. Используйте TXT, DOCX, XLSX или PDF."
+            "Формат не поддерживается. Используйте TXT, DOCX, XLSX, PPTX или PDF."
         )
 
     @staticmethod
@@ -173,4 +176,40 @@ class DocumentProcessor:
         writer.add_metadata(metadata)
         output = io.BytesIO()
         writer.write(output)
+        return output.getvalue()
+
+
+    @staticmethod
+    def read_pptx_bytes(file_bytes):
+        presentation = Presentation(io.BytesIO(file_bytes))
+        lines = []
+        for number, slide in enumerate(presentation.slides, start=1):
+            lines.append("[Слайд " + str(number) + "]")
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False) and shape.text.strip():
+                    lines.append(shape.text.strip())
+                if getattr(shape, "has_table", False):
+                    for row in shape.table.rows:
+                        lines.append(" | ".join(cell.text for cell in row.cells))
+        return "\n".join(lines)
+
+    @staticmethod
+    def modify_pptx_bytes(old_bytes, new_text):
+        presentation = Presentation(io.BytesIO(old_bytes))
+        paragraphs = []
+        for slide in presentation.slides:
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False):
+                    paragraphs.extend(shape.text_frame.paragraphs)
+        lines = new_text.split("\n")
+        for index, paragraph in enumerate(paragraphs):
+            value = lines[index] if index < len(lines) else ""
+            if paragraph.runs:
+                paragraph.runs[0].text = value
+                for run in paragraph.runs[1:]:
+                    run.text = ""
+            else:
+                paragraph.text = value
+        output = io.BytesIO()
+        presentation.save(output)
         return output.getvalue()
