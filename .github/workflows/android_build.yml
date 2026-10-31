@@ -1,5 +1,3 @@
-
-
 name: Local Office APK Builder
 
 on:
@@ -46,19 +44,26 @@ jobs:
             libffi-dev libssl-dev libsqlite3-dev \
             libxml2-dev libxslt1-dev
 
-      - name: Install Android SDK and NDK
+      - name: Install Android command-line tools
         uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: latest
           accept-android-sdk-licenses: true
-          packages: |
-            platform-tools
-            platforms;android-34
-            platforms;android-35
-            build-tools;34.0.0
-            build-tools;35.0.0
-            build-tools;37.0.0
-            ndk;28.2.13676358
+
+      - name: Install Android SDK and NDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "platforms;android-35" \
+            "build-tools;34.0.0" \
+            "build-tools;35.0.0" \
+            "build-tools;37.0.0" \
+            "ndk;28.2.13676358"
 
       - name: Configure Android paths
         shell: bash
