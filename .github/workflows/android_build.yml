@@ -77,31 +77,64 @@ jobs:
           test -x "$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager"
           test -x "$HOME/.buildozer/android/platform/android-sdk/build-tools/34.0.0/aidl"
 
-      - name: Install Buildozer
+      - name: Install Buildozer and host test dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "buildozer==1.5.0" "Cython==0.29.36"
+          python -m pip install "python-docx" "openpyxl" "pypdf" "lxml==4.9.3"
 
-      - name: Prepare python-for-android lxml recipe
+      - name: Test document processing
+        run: |
+          python -m py_compile main.py document_core.py
+          python - <<'PY'
+          import io
+          from docx import Document
+          from openpyxl import Workbook, load_workbook
+          from document_core import DocumentProcessor
+
+          # DOCX: text edit must keep a table and embedded image relationship
+          doc = Document()
+          doc.add_paragraph("First")
+          table = doc.add_table(rows=1, cols=1)
+          table.cell(0, 0).text = "Cell"
+          original = io.BytesIO()
+          doc.save(original)
+          edited = DocumentProcessor.modify_word_bytes(original.getvalue(), "Changed\\nCell edited")
+          reopened = Document(io.BytesIO(edited))
+          assert reopened.paragraphs[0].text == "Changed"
+          assert reopened.tables[0].cell(0, 0).text == "Cell edited"
+
+          # XLSX: workbook structure and second sheet survive editing.
+          book = Workbook()
+          book.active["A1"] = "Old"
+          book.create_sheet("Keep")["A1"] = "Preserve"
+          original_xlsx = io.BytesIO()
+          book.save(original_xlsx)
+          edited_xlsx = DocumentProcessor.modify_excel_bytes(original_xlsx.getvalue(), "New")
+          reopened_xlsx = load_workbook(io.BytesIO(edited_xlsx))
+          assert reopened_xlsx.active["A1"].value == "New"
+          assert reopened_xlsx["Keep"]["A1"].value == "Preserve"
+          print("Document processing tests passed.")
+          PY
+
+      - name: Prepare python-for-android
         shell: bash
         run: |
           set -euo pipefail
           P4A_DIR="$HOME/.buildozer/android/platform/python-for-android"
           git clone --depth 1 --branch v2024.01.21 https://github.com/kivy/python-for-android.git "$P4A_DIR"
           RECIPE="$P4A_DIR/pythonforandroid/recipes/lxml/__init__.py"
-          # p4a v2024.01.21 pins lxml 4.8.0, whose generated C code accesses
-          # private PyFrameObject fields removed in Python 3.11.
-          # lxml 5.2.2 supports Python 3.11 and keeps the Android static-build recipe.
-          sed -i "s/version = '4.8.0'/version = '5.2.2'/" "$RECIPE"
+          # 4.9.3 supports Python 3.11 and keeps p4a's STATIC build interface.
+          sed -i "s/version = '4.8.0'/version = '4.9.3'/" "$RECIPE"
+          grep -q "version = '4.9.3'" "$RECIPE"
           grep -n "version =" "$RECIPE" | head -1
-          test -d "$P4A_DIR/.git"
 
       - name: Verify project
-        shell: bash
         run: |
           test -f buildozer.spec
           test -f main.py
-          grep -nE '^(title|package.name|package.domain|source.dir|requirements|android.api|android.minapi|android.ndk|android.archs)[[:space:]]*=' buildozer.spec || true
+          test -f document_core.py
+          grep -n '^requirements' buildozer.spec
 
       - name: Build APK
         shell: bash
@@ -118,12 +151,8 @@ jobs:
           find . -type f -name "*.apk" \
             -not -path "./.buildozer/*" \
             -not -path "./.git/*" \
-            -exec cp {} dist/ ;
-          if ! ls dist/*.apk >/dev/null 2>&1; then
-            echo "ERROR: APK was not generated."
-            exit 1
-          fi
-          echo "APK successfully generated:"
+            -exec cp {} dist/ \;
+          test -n "$(find dist -maxdepth 1 -type f -name '*.apk' -print -quit)"
           ls -lh dist/
 
       - name: Upload APK
@@ -132,7 +161,7 @@ jobs:
         with:
           name: Local-Office-APK
           path: dist/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload build log
