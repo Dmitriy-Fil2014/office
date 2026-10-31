@@ -299,6 +299,9 @@ class DocumentLocalApp(MDApp):
             )
             intent.setType("*/*")
             mime_types = [
+                "application/msword",
+                "application/vnd.ms-powerpoint",
+                "application/vnd.ms-excel",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/pdf",
@@ -316,12 +319,15 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = f"Не удалось открыть выбор файла: {exc}"
 
     def on_file_selected(self, request_code, result_code, intent):
-        if request_code != 1012:
+        if request_code not in (1012, 1013):
             return
         activity.unbind(on_activity_result=self.on_file_selected)
         Activity = autoclass("android.app.Activity")
         if result_code == Activity.RESULT_OK and intent is not None:
             self.current_uri = intent.getData()
+            if request_code == 1013:
+                self._write_new_document()
+                return
             if self.current_uri is not None:
                 # Android's system document picker grants access to the
                 # selected file; broad storage permission is not required.
