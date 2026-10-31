@@ -64,7 +64,6 @@ jobs:
             "platforms;android-35" \
             "build-tools;34.0.0" \
             "build-tools;35.0.0" \
-            "build-tools;37.0.0" \
             "ndk;28.2.13676358"
 
       - name: Configure Android paths
@@ -73,9 +72,12 @@ jobs:
           echo "ANDROIDSDK=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROIDNDK=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           test -d "$ANDROID_HOME/platforms/android-34"
-          test -d "$ANDROID_HOME/build-tools/37.0.0"
+          test -d "$ANDROID_HOME/build-tools/34.0.0"
           test -d "$ANDROID_HOME/ndk/28.2.13676358"
           echo "Android SDK and NDK are installed."
+          mkdir -p "$HOME/.buildozer/android/platform"
+          ln -sfn "$ANDROID_HOME" "$HOME/.buildozer/android/platform/android-sdk"
+          test -x "$HOME/.buildozer/android/platform/android-sdk/build-tools/34.0.0/aidl"
 
       - name: Install Buildozer
         run: |
