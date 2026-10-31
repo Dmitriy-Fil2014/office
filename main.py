@@ -216,6 +216,74 @@ class DocumentLocalApp(MDApp):
         if self.consent_dialog:
             self.consent_dialog.dismiss()
 
+    def show_new_document_menu(self):
+        self.dialog = MDDialog(
+            title="Создать документ",
+            text="Выберите формат нового файла",
+            buttons=[
+                MDFlatButton(text="WORD", on_release=lambda x: self.create_new_document("docx")),
+                MDFlatButton(text="EXCEL", on_release=lambda x: self.create_new_document("xlsx")),
+                MDFlatButton(text="POWERPOINT", on_release=lambda x: self.create_new_document("pptx")),
+                MDFlatButton(text="TXT", on_release=lambda x: self.create_new_document("txt")),
+            ],
+        )
+        self.dialog.open()
+
+    def create_new_document(self, file_format):
+        try:
+            if self.dialog:
+                self.dialog.dismiss()
+            processor = self._get_processor()
+            self.current_file_format = file_format
+            self.current_file_name = {
+                "docx": "Новый документ.docx",
+                "xlsx": "Новая таблица.xlsx",
+                "pptx": "Новая презентация.pptx",
+                "txt": "Новый файл.txt",
+            }[file_format]
+            self.current_file_bytes = processor.create_document_bytes(file_format)
+            self.current_uri = None
+            self.root.ids.file_content_view.text = "[Слайд 1]" if file_format == "pptx" else ""
+            self.root.ids.save_btn.disabled = False
+            self.root.ids.status_label.text = "Новый файл. Нажмите «Сохранить» и выберите место."
+        except Exception as exc:
+            self.root.ids.status_label.text = f"Не удалось создать файл: {exc}"
+
+    def _start_create_document(self):
+        try:
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            mime = {
+                "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "txt": "text/plain",
+            }[self.current_file_format]
+            intent.setType(mime)
+            intent.putExtra(Intent.EXTRA_TITLE, self.current_file_name)
+            activity.bind(on_activity_result=self.on_file_selected)
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            current.startActivityForResult(intent, 1013)
+        except Exception as exc:
+            self.root.ids.status_label.text = f"Не удалось создать файл: {exc}"
+
+    def _write_new_document(self):
+        try:
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            stream = resolver.openOutputStream(self.current_uri, "wt")
+            if stream is None:
+                raise IOError("Android не смог создать файл.")
+            try:
+                stream.write(self.pending_create_bytes)
+                stream.flush()
+            finally:
+                stream.close()
+            self.current_file_bytes = self.pending_create_bytes
+            self.root.ids.status_label.text = f"Файл {self.current_file_name} создан."
+        except Exception as exc:
+            self.root.ids.status_label.text = f"Ошибка создания файла: {exc}"
+
     def open_system_storage(self):
         if platform != "android":
             self.root.ids.status_label.text = "Откройте APK на Android для выбора файла."
