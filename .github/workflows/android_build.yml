@@ -52,7 +52,12 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
 
+          # sdkmanager finishes after accepting all licenses; the yes process
+          # may receive SIGPIPE when sdkmanager closes its input.
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses
+          set -o pipefail
+
           "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-34" \
