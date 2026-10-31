@@ -99,7 +99,7 @@ jobs:
           table.cell(0, 0).text = "Cell"
           original = io.BytesIO()
           doc.save(original)
-          edited = DocumentProcessor.modify_word_bytes(original.getvalue(), "Changed\\nCell edited")
+          edited = DocumentProcessor.modify_word_bytes(original.getvalue(), "Changed\nCell edited")
           reopened = Document(io.BytesIO(edited))
           assert reopened.paragraphs[0].text == "Changed"
           assert reopened.tables[0].cell(0, 0).text == "Cell edited"
