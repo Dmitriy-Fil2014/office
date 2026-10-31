@@ -31,7 +31,7 @@ class DocumentLocalApp(MDApp):
             # of leaving the user with a black screen and an immediate exit.
             return Label(
                 text=(
-                    "Local Office: не удалось загрузить интерфейс.\\n"
+                    "Лист: не удалось загрузить интерфейс.\\n"
                     "Ошибка записана в local_office_startup.log\\n\\n"
                     + str(exc)
                 ),
