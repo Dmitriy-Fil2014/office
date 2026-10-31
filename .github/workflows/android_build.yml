@@ -77,6 +77,10 @@ jobs:
           echo "Android SDK and NDK are installed."
           mkdir -p "$HOME/.buildozer/android/platform"
           ln -sfn "$ANDROID_HOME" "$HOME/.buildozer/android/platform/android-sdk"
+          # Buildozer 1.5 still probes the legacy tools/bin/sdkmanager path.
+          mkdir -p "$ANDROID_HOME/tools/bin"
+          ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/tools/bin/sdkmanager"
+          test -x "$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager"
           test -x "$HOME/.buildozer/android/platform/android-sdk/build-tools/34.0.0/aidl"
 
       - name: Install Buildozer
