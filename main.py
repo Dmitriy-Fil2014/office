@@ -5,9 +5,10 @@ from kivy.clock import Clock
 from kivy.uix.label import Label
 import traceback
 import locale
+import sys
+import os
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton, MDFillRoundFlatButton
-from document_core import DocumentProcessor
 
 if platform == "android":
     from jnius import autoclass
@@ -41,8 +42,39 @@ class DocumentLocalApp(MDApp):
             )
 
     def on_start(self):
-        self.apply_preferences()
-        Clock.schedule_once(self._finish_startup, 0.5)
+        self._install_exception_hook()
+        try:
+            self.apply_preferences()
+        except Exception:
+            self._write_startup_error("Ошибка применения настроек при запуске")
+        Clock.schedule_once(self._finish_startup, 1.0)
+
+    def _install_exception_hook(self):
+        if getattr(self, "_exception_hook_installed", False):
+            return
+        self._exception_hook_installed = True
+        previous_hook = sys.excepthook
+
+        def report_uncaught_exception(exc_type, exc_value, exc_traceback):
+            try:
+                with open(self._diagnostic_log_path(), "a", encoding="utf-8") as log:
+                    log.write("\n=== НЕОБРАБОТАННАЯ ОШИБКА PYTHON ===\n")
+                    traceback.print_exception(exc_type, exc_value, exc_traceback, file=log)
+            except Exception:
+                pass
+            previous_hook(exc_type, exc_value, exc_traceback)
+
+        sys.excepthook = report_uncaught_exception
+
+    def _diagnostic_log_path(self):
+        try:
+            return os.path.join(self.user_data_dir, "local_office_startup.log")
+        except Exception:
+            return "local_office_startup.log"
+
+    def _get_processor(self):
+        from document_core import DocumentProcessor
+        return DocumentProcessor
 
     def _system_theme(self):
         if platform == "android":
@@ -108,8 +140,8 @@ class DocumentLocalApp(MDApp):
 
     def _write_startup_error(self, title):
         try:
-            with open("local_office_startup.log", "a", encoding="utf-8") as log:
-                log.write("\n" + title + "\n")
+            with open(self._diagnostic_log_path(), "a", encoding="utf-8") as log:
+                log.write("\n=== " + title + " ===\n")
                 log.write(traceback.format_exc())
         except Exception:
             pass
@@ -273,6 +305,7 @@ class DocumentLocalApp(MDApp):
             self.current_file_name, mime_type = self._get_file_metadata(
                 uri, resolver
             )
+            DocumentProcessor = self._get_processor()
             self.current_file_format = DocumentProcessor.detect_format(
                 self.current_file_name, mime_type
             )
@@ -307,6 +340,7 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Сначала откройте документ."
             return
         try:
+            DocumentProcessor = self._get_processor()
             new_text = self.root.ids.file_content_view.text
             writers = {
                 "txt": lambda: DocumentProcessor.modify_txt_bytes(new_text),
