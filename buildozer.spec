@@ -1,5 +1,5 @@
 [app]
-title = Local Office
+title = Лист
 package.name = localoffice
 package.domain = org.secure.office
 version = 1.0.2
