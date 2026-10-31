@@ -244,7 +244,7 @@ class DocumentLocalApp(MDApp):
             }[file_format]
             self.current_file_bytes = processor.create_document_bytes(file_format)
             self.current_uri = None
-            self.root.ids.file_content_view.text = "[Слайд 1]" if file_format == "pptx" else ""
+            self.root.ids.file_content_view.text = "[Слайд 1]\nВведите текст слайда" if file_format == "pptx" else ""
             self.root.ids.save_btn.disabled = False
             self.root.ids.status_label.text = "Новый файл. Нажмите «Сохранить» и выберите место."
         except Exception as exc:
@@ -300,9 +300,6 @@ class DocumentLocalApp(MDApp):
             )
             intent.setType("*/*")
             mime_types = [
-                "application/msword",
-                "application/vnd.ms-powerpoint",
-                "application/vnd.ms-excel",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/pdf",
