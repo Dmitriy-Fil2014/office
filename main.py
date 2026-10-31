@@ -1,6 +1,8 @@
 from kivy.utils import platform
 from kivymd.app import MDApp
 from kivy.lang import Builder
+from kivy.clock import Clock
+import traceback
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton, MDFillRoundFlatButton
 from document_core import DocumentProcessor
@@ -20,11 +22,36 @@ class DocumentLocalApp(MDApp):
 
     def build(self):
         self.config.setdefaults("General", {"accepted_legal": "0"})
-        return Builder.load_file("app.kv")
+        try:
+            return Builder.load_file("app.kv")
+        except Exception:
+            self._write_startup_error("Ошибка загрузки интерфейса")
+            raise
 
     def on_start(self):
-        if self.config.get("General", "accepted_legal") == "0":
-            self.show_mandatory_consent_dialog()
+        Clock.schedule_once(self._finish_startup, 0.5)
+
+    def _write_startup_error(self, title):
+        try:
+            with open("local_office_startup.log", "a", encoding="utf-8") as log:
+                log.write("\n" + title + "\n")
+                log.write(traceback.format_exc())
+        except Exception:
+            pass
+
+    def _finish_startup(self, _dt):
+        try:
+            if self.config.get("General", "accepted_legal") == "0":
+                self.show_mandatory_consent_dialog()
+        except Exception as exc:
+            self._write_startup_error("Ошибка первого запуска")
+            try:
+                self.root.ids.status_label.text = (
+                    "Не удалось открыть окно приветствия. "
+                    "Приложение продолжит работу. " + str(exc)
+                )
+            except Exception:
+                pass
 
     def show_mandatory_consent_dialog(self):
         policy_btn = MDFlatButton(
@@ -98,6 +125,7 @@ class DocumentLocalApp(MDApp):
             ).mActivity
             current_activity.startActivityForResult(intent, 1012)
         except Exception as exc:
+            self._write_startup_error("Ошибка выбора файла")
             self.root.ids.status_label.text = f"Не удалось открыть выбор файла: {exc}"
 
     def on_file_selected(self, request_code, result_code, intent):
@@ -108,6 +136,22 @@ class DocumentLocalApp(MDApp):
         if result_code == Activity.RESULT_OK and intent is not None:
             self.current_uri = intent.getData()
             if self.current_uri is not None:
+                # Android's system document picker grants access to the
+                # selected file; broad storage permission is not required.
+                try:
+                    Intent = autoclass("android.content.Intent")
+                    flags = intent.getFlags() & (
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    current_activity = autoclass(
+                        "org.kivy.android.PythonActivity"
+                    ).mActivity
+                    current_activity.getContentResolver().takePersistableUriPermission(
+                        self.current_uri, flags
+                    )
+                except Exception:
+                    pass
                 self.process_android_uri(self.current_uri)
 
     def _get_file_metadata(self, uri, resolver):
@@ -176,6 +220,7 @@ class DocumentLocalApp(MDApp):
                 "Редактирование выполняется локально."
             )
         except Exception as exc:
+            self._write_startup_error("Ошибка чтения документа")
             self.root.ids.file_content_view.text = ""
             self.root.ids.save_btn.disabled = True
             self.root.ids.status_label.text = f"Ошибка открытия: {exc}"
