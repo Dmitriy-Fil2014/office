@@ -12,6 +12,24 @@ from pptx import Presentation
 
 class DocumentProcessor:
     @staticmethod
+    def create_document_bytes(file_format):
+        output = io.BytesIO()
+        if file_format == "txt":
+            return b""
+        if file_format == "docx":
+            Document().save(output)
+        elif file_format == "xlsx":
+            from openpyxl import Workbook
+            Workbook().save(output)
+        elif file_format == "pptx":
+            presentation = Presentation()
+            presentation.slides.add_slide(presentation.slide_layouts[6])
+            presentation.save(output)
+        else:
+            raise ValueError("Неизвестный формат документа")
+        return output.getvalue()
+
+    @staticmethod
     def detect_format(file_name, mime_type=""):
         extension = os.path.splitext(str(file_name).lower())[1]
         by_extension = {
