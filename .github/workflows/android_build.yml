@@ -1,4 +1,4 @@
-name: Local Office APK Builder
+name: Лист — сборка APK
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Сборка APK для Android
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     env:
@@ -159,7 +159,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Office-APK
+          name: List-APK
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -168,7 +168,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Local-Office-Build-Log
+          name: List-Build-Log
           path: build-report/build.log
           if-no-files-found: warn
           retention-days: 14
