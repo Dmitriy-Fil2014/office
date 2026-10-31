@@ -51,13 +51,9 @@ jobs:
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-
-          # sdkmanager finishes after accepting all licenses; the yes process
-          # may receive SIGPIPE when sdkmanager closes its input.
           set +o pipefail
           yes | "$SDKMANAGER" --licenses
           set -o pipefail
-
           "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-34" \
@@ -74,10 +70,8 @@ jobs:
           test -d "$ANDROID_HOME/platforms/android-34"
           test -d "$ANDROID_HOME/build-tools/34.0.0"
           test -d "$ANDROID_HOME/ndk/28.2.13676358"
-          echo "Android SDK and NDK are installed."
           mkdir -p "$HOME/.buildozer/android/platform"
           ln -sfn "$ANDROID_HOME" "$HOME/.buildozer/android/platform/android-sdk"
-          # Buildozer 1.5 still probes the legacy tools/bin/sdkmanager path.
           mkdir -p "$ANDROID_HOME/tools/bin"
           ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "$ANDROID_HOME/tools/bin/sdkmanager"
           test -x "$HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager"
@@ -88,12 +82,25 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "buildozer==1.5.0" "Cython==0.29.36"
 
+      - name: Prepare python-for-android lxml recipe
+        shell: bash
+        run: |
+          set -euo pipefail
+          P4A_DIR="$HOME/.buildozer/android/platform/python-for-android"
+          git clone --depth 1 --branch v2024.01.21 https://github.com/kivy/python-for-android.git "$P4A_DIR"
+          RECIPE="$P4A_DIR/pythonforandroid/recipes/lxml/__init__.py"
+          # p4a v2024.01.21 pins lxml 4.8.0, whose generated C code accesses
+          # private PyFrameObject fields removed in Python 3.11.
+          # lxml 5.2.2 supports Python 3.11 and keeps the Android static-build recipe.
+          sed -i "s/version = '4.8.0'/version = '5.2.2'/" "$RECIPE"
+          grep -n "version =" "$RECIPE" | head -1
+          test -d "$P4A_DIR/.git"
+
       - name: Verify project
         shell: bash
         run: |
           test -f buildozer.spec
           test -f main.py
-          echo "Project files found."
           grep -nE '^(title|package.name|package.domain|source.dir|requirements|android.api|android.minapi|android.ndk|android.archs)[[:space:]]*=' buildozer.spec || true
 
       - name: Build APK
@@ -111,7 +118,7 @@ jobs:
           find . -type f -name "*.apk" \
             -not -path "./.buildozer/*" \
             -not -path "./.git/*" \
-            -exec cp {} dist/ \;
+            -exec cp {} dist/ ;
           if ! ls dist/*.apk >/dev/null 2>&1; then
             echo "ERROR: APK was not generated."
             exit 1
