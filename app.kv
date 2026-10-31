@@ -1,56 +1,115 @@
 MDScreen:
     md_bg_color: app.theme_cls.bg_normal
 
-    MDBoxLayout:
-        orientation: 'vertical'
-        padding: "16dp"
-        spacing: "16dp"
+    FloatLayout:
+        MDBoxLayout:
+            orientation: "vertical"
+            padding: "16dp"
+            spacing: "12dp"
 
-        MDTopAppBar:
-            title: "Лист"
-            elevation: 2
-            pos_hint: {"top": 1}
-            right_action_items: [["cog", lambda x: app.show_settings_menu()], ["info", lambda x: app.show_info_menu()]]
+            MDTopAppBar:
+                title: "Лист"
+                elevation: 3
+                right_action_items: [["cog", lambda x: app.show_settings_menu()], ["information-outline", lambda x: app.show_info_menu()]]
 
-        MDLabel:
-            id: status_label
-            text: "Выберите файл. Изменения перезапишут документ на телефоне."
-            halign: "center"
-            theme_text_color: "Secondary"
-            size_hint_y: None
-            height: "40dp"
+            MDCard:
+                orientation: "vertical"
+                padding: "14dp"
+                spacing: "5dp"
+                size_hint_y: None
+                height: "76dp"
+                radius: [18, 18, 18, 18]
+                elevation: 1
+                MDLabel:
+                    text: "Ваши документы"
+                    font_style: "H6"
+                    bold: True
+                    size_hint_y: None
+                    height: "28dp"
+                MDLabel:
+                    id: status_label
+                    text: "Создавайте и редактируйте файлы прямо на телефоне"
+                    theme_text_color: "Secondary"
+                    font_style: "Caption"
+                    size_hint_y: None
+                    height: "24dp"
 
-        ScrollView:
-            do_scroll_x: False
-            do_scroll_y: True
-            bar_width: "4dp"
+            MDCard:
+                orientation: "vertical"
+                padding: "8dp"
+                radius: [18, 18, 18, 18]
+                elevation: 1
+                ScrollView:
+                    do_scroll_x: False
+                    do_scroll_y: True
+                    bar_width: "3dp"
+                    MDTextField:
+                        id: file_content_view
+                        text: ""
+                        multiline: True
+                        mode: "rectangle"
+                        size_hint_y: None
+                        height: max(self.minimum_height, root.height * 0.55)
+                        hint_text: "Текст документа появится здесь…"
+                        font_size: "16sp"
 
-            MDTextField:
-                id: file_content_view
-                text: ""
-                multiline: True
-                readonly: False
-                mode: "rectangle"
-                hint_text: "Содержимое документа отобразится здесь"
+            MDBoxLayout:
+                orientation: "horizontal"
+                spacing: "8dp"
+                size_hint_y: None
+                height: "52dp"
+                MDRaisedButton:
+                    text: "Создать"
+                    icon: "plus"
+                    on_release: app.show_new_document_menu()
+                    size_hint_x: 0.33
+                MDRaisedButton:
+                    id: open_btn
+                    text: "Открыть"
+                    icon: "folder-open"
+                    on_release: app.open_system_storage()
+                    size_hint_x: 0.33
+                MDRaisedButton:
+                    id: save_btn
+                    text: "Сохранить"
+                    icon: "content-save"
+                    on_release: app.save_changes_to_storage()
+                    disabled: True
+                    size_hint_x: 0.34
 
         MDBoxLayout:
-            orientation: 'horizontal'
-            spacing: "12dp"
-            size_hint_y: None
-            height: "50dp"
-
-            MDFillRoundFlatIconButton:
-                id: open_btn
-                text: "ОТКРЫТЬ ФАЙЛ"
-                icon: "file-find"
-                size_hint_x: 0.5
-                on_release: app.open_system_storage()
-
-            MDFillRoundFlatIconButton:
-                id: save_btn
-                text: "СОХРАНИТЬ"
-                icon: "content-save"
-                md_bg_color: 0.1, 0.6, 0.3, 1
-                size_hint_x: 0.5
-                disabled: True
-                on_release: app.save_changes_to_storage()
+            id: splash_layer
+            orientation: "vertical"
+            spacing: "18dp"
+            padding: "32dp"
+            size_hint: 1, 1
+            pos: 0, 0
+            opacity: 1
+            md_bg_color: app.theme_cls.primary_color
+            Widget:
+                size_hint_y: 1
+            MDLabel:
+                text: "Лист"
+                halign: "center"
+                font_style: "H3"
+                bold: True
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                size_hint_y: None
+                height: "64dp"
+            MDSpinner:
+                size_hint: None, None
+                size: "42dp", "42dp"
+                pos_hint: {"center_x": 0.5}
+                active: True
+                color: 1, 1, 1, 1
+            MDLabel:
+                text: "Загрузка"
+                halign: "center"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 0.9
+                font_style: "Subtitle1"
+                size_hint_y: None
+                height: "34dp"
+            Widget:
+                size_hint_y: 1
