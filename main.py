@@ -23,6 +23,7 @@ class DocumentLocalApp(MDApp):
     current_file_name = ""
     current_file_format = ""
     current_file_bytes = b""
+    pending_create_bytes = b""
 
     def build(self):
         self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "system"})
@@ -420,51 +421,39 @@ class DocumentLocalApp(MDApp):
             self.root.ids.save_btn.disabled = True
             self.root.ids.status_label.text = f"Ошибка открытия: {exc}"
 
+    def _build_updated_document(self):
+        processor = self._get_processor()
+        new_text = self.root.ids.file_content_view.text
+        writers = {
+            "txt": lambda: processor.modify_txt_bytes(new_text),
+            "docx": lambda: processor.modify_word_bytes(self.current_file_bytes, new_text),
+            "xlsx": lambda: processor.modify_excel_bytes(self.current_file_bytes, new_text),
+            "pdf": lambda: processor.modify_pdf_bytes(self.current_file_bytes, new_text),
+            "pptx": lambda: processor.modify_pptx_bytes(self.current_file_bytes, new_text),
+        }
+        return writers[self.current_file_format]()
+
     def save_changes_to_storage(self):
-        if not self.current_uri or platform != "android":
-            self.root.ids.status_label.text = "Сначала откройте документ."
+        if platform != "android":
+            self.root.ids.status_label.text = "Сохранение доступно в Android-приложении."
             return
         try:
-            DocumentProcessor = self._get_processor()
-            new_text = self.root.ids.file_content_view.text
-            writers = {
-                "txt": lambda: DocumentProcessor.modify_txt_bytes(new_text),
-                "docx": lambda: DocumentProcessor.modify_word_bytes(
-                    self.current_file_bytes, new_text
-                ),
-                "xlsx": lambda: DocumentProcessor.modify_excel_bytes(
-                    self.current_file_bytes, new_text
-                ),
-                "pdf": lambda: DocumentProcessor.modify_pdf_bytes(
-                    self.current_file_bytes, new_text
-                ),
-                "pptx": lambda: DocumentProcessor.modify_pptx_bytes(
-                    self.current_file_bytes, new_text
-                ),
-            }
-            updated_bytes = writers[self.current_file_format]()
-
-            current_activity = autoclass(
-                "org.kivy.android.PythonActivity"
-            ).mActivity
-            resolver = current_activity.getContentResolver()
-            output_stream = None
-            try:
-                output_stream = resolver.openOutputStream(self.current_uri, "rwt")
-            except Exception:
-                output_stream = resolver.openOutputStream(self.current_uri, "wt")
-            if output_stream is None:
+            updated = self._build_updated_document()
+            if not self.current_uri:
+                self.pending_create_bytes = updated
+                self._start_create_document()
+                return
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            stream = resolver.openOutputStream(self.current_uri, "rwt")
+            if stream is None:
                 raise IOError("Android не предоставил поток записи для этого файла.")
             try:
-                output_stream.write(updated_bytes)
-                output_stream.flush()
+                stream.write(updated)
+                stream.flush()
             finally:
-                output_stream.close()
-
-            self.current_file_bytes = updated_bytes
-            self.root.ids.status_label.text = (
-                f"Файл {self.current_file_name} успешно сохранён."
-            )
+                stream.close()
+            self.current_file_bytes = updated
+            self.root.ids.status_label.text = f"Файл {self.current_file_name} успешно сохранён."
         except Exception as exc:
             self.root.ids.status_label.text = f"Ошибка сохранения: {exc}"
 
