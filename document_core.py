@@ -175,11 +175,18 @@ class DocumentProcessor:
     @staticmethod
     def add_slide_to_pptx(old_bytes):
         from pptx import Presentation
-        from pptx.util import Inches
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RGBColor
         presentation = Presentation(io.BytesIO(old_bytes))
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-        shape = slide.shapes.add_textbox(Inches(0.7), Inches(0.6), Inches(8.0), Inches(1.2))
-        shape.text_frame.text = "Новый слайд"
+        slide.background.fill.solid()
+        slide.background.fill.fore_color.rgb = RGBColor(245, 248, 255)
+        shape = slide.shapes.add_textbox(Inches(0.8), Inches(0.65), Inches(8.2), Inches(1.1))
+        frame = shape.text_frame
+        frame.text = "Новый слайд"
+        frame.paragraphs[0].font.size = Pt(30)
+        frame.paragraphs[0].font.bold = True
+        frame.paragraphs[0].font.color.rgb = RGBColor(25, 65, 120)
         output = io.BytesIO()
         presentation.save(output)
         return output.getvalue()
@@ -192,6 +199,19 @@ class DocumentProcessor:
         slide.shapes.add_picture(io.BytesIO(image_bytes), 914400, 914400, width=5486400)
         output = io.BytesIO()
         presentation.save(output)
+        return output.getvalue()
+
+    @staticmethod
+    def add_table_to_docx(old_bytes, rows=3, cols=3):
+        from docx import Document
+        document = Document(io.BytesIO(old_bytes))
+        table = document.add_table(rows=max(1, int(rows)), cols=max(1, int(cols)))
+        table.style = "Table Grid"
+        for row_index, row in enumerate(table.rows, start=1):
+            for col_index, cell in enumerate(row.cells, start=1):
+                cell.text = "Строка %d, столбец %d" % (row_index, col_index)
+        output = io.BytesIO()
+        document.save(output)
         return output.getvalue()
 
     @staticmethod
@@ -301,22 +321,7 @@ class DocumentProcessor:
 
     @staticmethod
     def modify_pptx_bytes(old_bytes, new_text):
-        from pptx import Presentation
-        presentation = Presentation(io.BytesIO(old_bytes))
-        paragraphs = []
-        for slide in presentation.slides:
-            for shape in slide.shapes:
-                if getattr(shape, "has_text_frame", False):
-                    paragraphs.extend(shape.text_frame.paragraphs)
-        lines = [line for line in new_text.split("\n") if not line.strip().startswith("[Слайд ")]
-        for index, paragraph in enumerate(paragraphs):
-            value = lines[index] if index < len(lines) else ""
-            if paragraph.runs:
-                paragraph.runs[0].text = value
-                for run in paragraph.runs[1:]:
-                    run.text = ""
-            else:
-                paragraph.text = value
-        output = io.BytesIO()
-        presentation.save(output)
-        return output.getvalue()
+        # Never rewrite a presentation from a flattened text dump: doing so
+        # destroys text on later slides and can erase content the user typed.
+        # Until the slide canvas editor is used, preserve the original package.
+        return old_bytes
