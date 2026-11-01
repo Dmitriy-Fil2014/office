@@ -213,9 +213,7 @@ class DocumentProcessor:
         document = Document(io.BytesIO(old_bytes))
         table = document.add_table(rows=max(1, int(rows)), cols=max(1, int(cols)))
         table.style = "Table Grid"
-        for row_index, row in enumerate(table.rows, start=1):
-            for col_index, cell in enumerate(row.cells, start=1):
-                cell.text = "Строка %d, столбец %d" % (row_index, col_index)
+        # Leave cells empty so the user can enter their own content in Word.
         output = io.BytesIO()
         document.save(output)
         return output.getvalue()
