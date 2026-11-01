@@ -6,9 +6,9 @@ version = 1.0.2
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,txt
 icon.filename = app_icon.png
-presplash.filename = app_icon.png
+presplash.filename =
 android.presplash_color = #102D55
-# Native icon presplash disabled; the app displays its own animated loading screen.
+# Keep the native presplash image empty; the app shows its own animated loading screen.
 orientation = portrait
 p4a.branch = v2024.01.21
 # sqlite3 is included with Python; python-for-android supplies hostpython3.
