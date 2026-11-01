@@ -161,6 +161,9 @@ class DocumentLocalApp(MDApp):
             elif self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
                 self.show_presentation_editor()
+            elif self.current_file_format == "image":
+                self.show_image_viewer()
+                self.root.ids.save_btn.disabled = True
             else:
                 readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
@@ -682,6 +685,11 @@ class DocumentLocalApp(MDApp):
                 self.show_presentation_editor()
                 self.root.ids.status_label.text = "Открыта презентация: " + self.current_file_name
                 return
+            if self.current_file_format == "image":
+                self.show_image_viewer()
+                self.root.ids.save_btn.disabled = True
+                self.root.ids.status_label.text = "Открыто изображение: " + self.current_file_name
+                return
 
             readers = {"txt": DocumentProcessor.read_txt_bytes, "pdf": DocumentProcessor.read_pdf_bytes}
             text = readers[self.current_file_format](self.current_file_bytes)
@@ -914,6 +922,29 @@ class DocumentLocalApp(MDApp):
     def apply_word_highlight(self):
         self._editor_selection_wrap("[highlight=#FFF176]", "[/highlight]")
 
+    def show_image_viewer(self):
+        """Open raster images in a black, edge-to-edge viewer."""
+        processor = self._get_processor()
+        png_bytes = processor.normalize_image_bytes(self.current_file_bytes)
+        texture = CoreImage(io.BytesIO(png_bytes), ext="png").texture
+        modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
+                          background_color=(0.015, 0.02, 0.03, 1),
+                          overlay_color=(0, 0, 0, 0))
+        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
+        header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "Изображение",
+                                  bold=True, theme_text_color="Custom",
+                                  text_color=(1, 1, 1, 1), valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(
+            text="Закрыть", on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        viewer = KivyImage(texture=texture, size_hint=(1, 1),
+                           allow_stretch=True, keep_ratio=True)
+        outer.add_widget(viewer)
+        modal.add_widget(outer)
+        self.image_viewer_modal = modal
+        modal.open()
+
     def show_fullscreen_text_editor(self, text):
         modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
                           background_color=(0.02, 0.04, 0.08, 0.88))
@@ -975,7 +1006,8 @@ class DocumentLocalApp(MDApp):
         try:
             for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):
                 try:
-                    texture = CoreImage(io.BytesIO(image_bytes)).texture
+                    safe_image = processor.normalize_image_bytes(image_bytes)
+                    texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
                     preview = KivyImage(texture=texture, size_hint=(1,None),
                                         height=min(self.root.width * 0.72, 360),
                                         allow_stretch=True, keep_ratio=True)
@@ -1037,7 +1069,8 @@ class DocumentLocalApp(MDApp):
             card.add_widget(label)
             for image_bytes in slide.get("images", [])[:3]:
                 try:
-                    texture = CoreImage(io.BytesIO(image_bytes)).texture
+                    safe_image = processor.normalize_image_bytes(image_bytes)
+                    texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
                     card.add_widget(KivyImage(texture=texture, size_hint=(1,None),
                         height="100dp", allow_stretch=True, keep_ratio=True))
                 except Exception:
