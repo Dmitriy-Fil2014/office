@@ -755,16 +755,46 @@ class DocumentLocalApp(MDApp):
         modal.open()
 
     def _insert_word_table(self, rows, cols, modal=None):
+        if modal:
+            modal.dismiss()
+        editor = ModalView(size_hint=(0.96, 0.88), auto_dismiss=False)
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        outer.add_widget(MDLabel(text="Заполните ячейки таблицы " + str(rows) + "×" + str(cols),
+                                 size_hint_y=None, height="42dp", halign="center", bold=True))
+        scroll = ScrollView(do_scroll_x=True, do_scroll_y=True)
+        grid = GridLayout(cols=cols, size_hint=(None, None), spacing="3dp",
+                          row_default_height="52dp", row_force_default=True)
+        grid.bind(minimum_width=grid.setter("width"), minimum_height=grid.setter("height"))
+        fields = []
+        for _r in range(rows):
+            for _c in range(cols):
+                field = TextInput(multiline=False, hint_text="Текст",
+                                  size_hint=(None, None), size=("128dp", "52dp"),
+                                  font_size="14sp")
+                grid.add_widget(field)
+                fields.append(field)
+        scroll.add_widget(grid)
+        outer.add_widget(scroll)
+        actions = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
+        actions.add_widget(MDFillRoundFlatButton(text="Вставить в Word", on_release=lambda *_:
+            self._commit_word_table(rows, cols, fields, editor)))
+        actions.add_widget(MDFillRoundFlatButton(text="Отмена", on_release=lambda *_: editor.dismiss()))
+        outer.add_widget(actions)
+        editor.add_widget(outer)
+        self.word_table_editor = editor
+        editor.open()
+
+    def _commit_word_table(self, rows, cols, fields, editor):
         try:
+            values = [[fields[r * cols + c].text for c in range(cols)] for r in range(rows)]
             self.current_file_bytes = self._get_processor().add_table_to_docx(
-                self.current_file_bytes, rows, cols)
+                self.current_file_bytes, rows, cols, values)
             self.root.ids.file_content_view.text = self._get_processor().read_word_bytes(
                 self.current_file_bytes)
-            if modal:
-                modal.dismiss()
-            self.root.ids.status_label.text = "Добавлена таблица " + str(rows) + "×" + str(cols) + ". Нажмите «Сохранить»."
+            editor.dismiss()
+            self.root.ids.status_label.text = "Таблица " + str(rows) + "×" + str(cols) + " добавлена. Нажмите «Сохранить»."
         except Exception as exc:
-            self.root.ids.status_label.text = "Не удалось добавить таблицу: " + str(exc)
+            self.root.ids.status_label.text = "Не удалось вставить таблицу: " + str(exc)
 
     def add_slide_to_presentation(self):
         if self.current_file_format != "pptx":
