@@ -134,6 +134,8 @@ class DocumentProcessor:
             container = parent.element.body
         elif hasattr(parent, "_tc"):
             container = parent._tc
+        elif hasattr(parent, "_element"):
+            container = parent._element
         else:
             container = parent
         for child in container.iterchildren():
