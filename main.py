@@ -947,6 +947,10 @@ class DocumentLocalApp(MDApp):
         header = MDBoxLayout(size_hint_y=None, height="46dp", spacing="5dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Word",
                                   bold=True, valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(text="Изображение",
+            on_release=lambda *_: self.add_picture_to_document()))
+        header.add_widget(MDFillRoundFlatButton(text="Таблица",
+            on_release=lambda *_: self.add_table_to_word()))
         header.add_widget(MDFillRoundFlatButton(text="Сохранить",
             on_release=lambda *_: self._save_word_editor(modal)))
         header.add_widget(MDFillRoundFlatButton(text="Закрыть",
