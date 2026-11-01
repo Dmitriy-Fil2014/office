@@ -157,7 +157,24 @@ class DocumentProcessor:
         if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
             raise ValueError('Выбранный файл не является корректным DOCX. Возможно, это старый формат DOC или файл повреждён.')
         document = Document(io.BytesIO(file_bytes))
-        paragraphs = list(DocumentProcessor._iter_word_paragraphs(document))
+        # Include the main story, tables, and section headers/footers so
+        # commonly used Word content is not silently omitted in the editor.
+        containers = [document]
+        for section in document.sections:
+            containers.extend([
+                section.header, section.footer,
+                section.first_page_header, section.first_page_footer,
+                section.even_page_header, section.even_page_footer,
+            ])
+        paragraphs = []
+        seen = set()
+        for container in containers:
+            for paragraph in DocumentProcessor._iter_word_paragraphs(container):
+                marker = paragraph._p
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                paragraphs.append(paragraph)
         return "\n".join(paragraph.text for paragraph in paragraphs)
 
     @staticmethod
