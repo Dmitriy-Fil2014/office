@@ -59,8 +59,9 @@ class DocumentLocalApp(MDApp):
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
         # Request Android storage access as soon as the first screen is ready.
-        Clock.schedule_once(self.request_all_files_access, 0.85)
         Clock.schedule_once(self._finish_startup, 0.65)
+        Clock.schedule_once(self._hide_splash, 0.75)
+        Clock.schedule_once(self.request_all_files_access, 0.85)
         Clock.schedule_once(self._open_shared_file, 1.0)
         Clock.schedule_once(lambda _dt: self.refresh_document_list(), 1.2)
 
@@ -392,6 +393,7 @@ class DocumentLocalApp(MDApp):
             }[file_format]
             self.current_file_bytes = processor.create_document_bytes(file_format)
             self.current_uri = None
+            self.current_local_path = None
             self.root.ids.file_content_view.text = "[Слайд 1]\nВведите текст слайда" if file_format == "pptx" else ""
             if file_format == "xlsx":
                 self.show_spreadsheet_editor()
@@ -621,6 +623,7 @@ class DocumentLocalApp(MDApp):
         try:
             current_activity = autoclass("org.kivy.android.PythonActivity").mActivity
             resolver = current_activity.getContentResolver()
+            self.current_local_path = None
             self.current_file_name, mime_type = self._get_file_metadata(uri, resolver)
             input_stream = resolver.openInputStream(uri)
             if input_stream is None:
