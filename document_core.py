@@ -144,7 +144,7 @@ class DocumentProcessor:
         import re
         from docx.shared import RGBColor
         from docx.enum.text import WD_COLOR_INDEX
-        token = re.compile(r"(\\[b\\]|\\[/b\\]|\\[color=#[0-9A-Fa-f]{6}\\]|\\[/color\\]|\\[highlight=#[0-9A-Fa-f]{6}\\]|\\[/highlight\\])")
+        token = re.compile(r"(\[b\]|\[/b\]|\[color=#[0-9A-Fa-f]{6}\]|\[/color\]|\[highlight=#[0-9A-Fa-f]{6}\]|\[/highlight\])")
         pieces = token.split(value)
         # Clear text nodes but keep drawing elements (embedded pictures).
         for node in paragraph._p.xpath(".//w:t"):
