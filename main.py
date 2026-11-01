@@ -174,7 +174,7 @@ class DocumentLocalApp(MDApp):
 
     def show_settings_menu(self):
         en = getattr(self, "language", "ru") == "en"
-        modal = ModalView(size_hint=(0.88, 0.72), auto_dismiss=True,
+        modal = ModalView(size_hint=(0.94, 0.94), auto_dismiss=True,
                           background_color=(0.02, 0.05, 0.12, 0.62))
         card = MDCard(orientation="vertical", padding="18dp", spacing="8dp",
                       radius=[24, 24, 24, 24], elevation=8,
@@ -373,12 +373,26 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = f"Не удалось открыть выбор файла: {exc}"
 
     def on_file_selected(self, request_code, result_code, intent):
-        if request_code not in (1012, 1013):
+        if request_code not in (1012, 1013, 1015):
             return
         activity.unbind(on_activity_result=self.on_file_selected)
         Activity = autoclass("android.app.Activity")
         if result_code == Activity.RESULT_OK and intent is not None:
             self.current_uri = intent.getData()
+            if request_code == 1015:
+                self.tree_uri = self.current_uri
+                try:
+                    Intent = autoclass("android.content.Intent")
+                    flags = intent.getFlags() & (
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver().takePersistableUriPermission(
+                        self.tree_uri, flags)
+                except Exception:
+                    pass
+                self.show_folder_contents(self.tree_uri)
+                return
             if request_code == 1013:
                 self._write_new_document()
                 return
@@ -400,6 +414,74 @@ class DocumentLocalApp(MDApp):
                 except Exception:
                     pass
                 self.process_android_uri(self.current_uri)
+
+    def request_folder_access(self):
+        if platform != "android":
+            self.root.ids.status_label.text = "Выбор папки доступен в Android-приложении."
+            return
+        try:
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            intent.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
+            activity.bind(on_activity_result=self.on_file_selected)
+            autoclass("org.kivy.android.PythonActivity").mActivity.startActivityForResult(
+                intent, 1015)
+            self.root.ids.status_label.text = "Выберите папку и подтвердите доступ кнопкой «Использовать эту папку»."
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось запросить доступ к папке: " + str(exc)
+
+    def show_folder_contents(self, tree_uri, parent_document_id=None):
+        try:
+            Documents = autoclass("android.provider.DocumentsContract")
+            Document = autoclass("android.provider.DocumentsContract$Document")
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            if parent_document_id is None:
+                parent_document_id = Documents.getTreeDocumentId(tree_uri)
+            children_uri = Documents.buildChildDocumentsUriUsingTree(
+                tree_uri, parent_document_id)
+            cursor = resolver.query(children_uri, None, None, None, None)
+            modal = ModalView(size_hint=(0.94, 0.90), auto_dismiss=True)
+            outer = MDBoxLayout(orientation="vertical", padding="12dp", spacing="8dp")
+            outer.add_widget(MDLabel(text="Файлы и папки", size_hint_y=None,
+                                     height="42dp", bold=True))
+            scroll = ScrollView()
+            listing = MDBoxLayout(orientation="vertical", size_hint_y=None, spacing="6dp")
+            listing.bind(minimum_height=listing.setter("height"))
+            if cursor is not None:
+                try:
+                    id_col = cursor.getColumnIndex(Document.COLUMN_DOCUMENT_ID)
+                    name_col = cursor.getColumnIndex(Document.COLUMN_DISPLAY_NAME)
+                    mime_col = cursor.getColumnIndex(Document.COLUMN_MIME_TYPE)
+                    while cursor.moveToNext():
+                        document_id = str(cursor.getString(id_col))
+                        name = str(cursor.getString(name_col) or "Без названия")
+                        mime = str(cursor.getString(mime_col) or "")
+                        is_dir = mime == Document.MIME_TYPE_DIR
+                        button = MDFillRoundFlatButton(
+                            text=("📁 " if is_dir else "📄 ") + name,
+                            size_hint_x=1,
+                            on_release=lambda *_ , did=document_id, directory=is_dir:
+                                (modal.dismiss(),
+                                 self.show_folder_contents(tree_uri, did) if directory else
+                                 self.process_android_uri(Documents.buildDocumentUriUsingTree(tree_uri, did))))
+                        listing.add_widget(button)
+                finally:
+                    cursor.close()
+            scroll.add_widget(listing)
+            outer.add_widget(scroll)
+            outer.add_widget(MDFillRoundFlatButton(
+                text="Закрыть", size_hint_x=1,
+                on_release=lambda *_: modal.dismiss()))
+            modal.add_widget(outer)
+            self.folder_view = modal
+            modal.open()
+            self.root.ids.status_label.text = "Папка открыта. Выберите документ из списка."
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось показать содержимое папки: " + str(exc)
 
     def _get_file_metadata(self, uri, resolver):
         name = ""
@@ -483,7 +565,7 @@ class DocumentLocalApp(MDApp):
         outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
         outer.add_widget(MDLabel(text="Таблица Excel", size_hint_y=None, height="42dp", bold=True, halign="center"))
         scroll = ScrollView(do_scroll_x=True, do_scroll_y=True)
-        grid = GridLayout(cols=8, size_hint=(None, None), spacing="2dp",
+        grid = GridLayout(cols=max(8, max((len(row) for row in values), default=8)), size_hint=(None, None), spacing="2dp",
                           row_default_height="42dp", row_force_default=True)
         grid.bind(minimum_width=grid.setter("width"), minimum_height=grid.setter("height"))
         for row in values:
