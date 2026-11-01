@@ -208,12 +208,16 @@ class DocumentProcessor:
         return output.getvalue()
 
     @staticmethod
-    def add_table_to_docx(old_bytes, rows=3, cols=3):
+    def add_table_to_docx(old_bytes, rows=3, cols=3, values=None):
         from docx import Document
         document = Document(io.BytesIO(old_bytes))
-        table = document.add_table(rows=max(1, int(rows)), cols=max(1, int(cols)))
+        row_count, col_count = max(1, int(rows)), max(1, int(cols))
+        table = document.add_table(rows=row_count, cols=col_count)
         table.style = "Table Grid"
-        # Leave cells empty so the user can enter their own content in Word.
+        for r in range(row_count):
+            for c in range(col_count):
+                if values and r < len(values) and c < len(values[r]):
+                    table.cell(r, c).text = str(values[r][c])
         output = io.BytesIO()
         document.save(output)
         return output.getvalue()
