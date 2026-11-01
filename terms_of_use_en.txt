@@ -1,0 +1,29 @@
+TERMS OF USE
+Leaf application
+Revision: 1 November 2026
+
+1. Acceptance
+By using Leaf, you confirm that you have read these Terms. If you do not agree, stop using the app.
+
+2. Purpose
+Leaf is intended for local viewing, creation and editing of document text. The current version supports TXT, DOCX, XLSX, PPTX and PDF within the app's supported features.
+
+3. Editing limitations
+Leaf is not a full replacement for Microsoft Word, Excel or PowerPoint. When a document is converted into an editable text representation, its original layout, fonts, styles, images, formulas, charts, animations, macros, comments and other complex elements may not be displayed or preserved. Support depends on the format and structure of each file. PDF files cannot currently be edited as full page layouts.
+
+4. Saving and backups
+When saving, the app writes the result to the file or storage location selected by the user. Make a separate backup before editing important documents and check the result after saving. Do not use the app as the only storage location for important data.
+
+5. User responsibilities
+You are responsible for having lawful access to selected documents, their contents, the chosen save location and maintaining backups. Do not open files from unknown or untrusted sources.
+
+6. Availability and stability
+The app is provided “as is”. The developer aims to fix defects but does not guarantee uninterrupted operation, compatibility with every device or error-free processing of every file. Operation may depend on the Android version, available memory, access permissions and the document itself.
+
+7. Limitation of liability
+To the extent permitted by applicable law, the developer is not responsible for data loss caused by missing backups, user actions, device failures or third-party storage. Nothing in these Terms limits rights that cannot legally be limited.
+
+8. Updates
+App features and these Terms may change with updates. Please review the current version before using updated releases.
+
+These Terms are written for information and do not constitute legal advice.
