@@ -6,6 +6,8 @@ version = 1.0.2
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,txt
 icon.filename = app_icon.png
+presplash.filename = app_icon.png
+android.presplash_color = #102D55
 # Native icon presplash disabled; the app displays its own animated loading screen.
 orientation = portrait
 p4a.branch = v2024.01.21
@@ -13,6 +15,7 @@ p4a.branch = v2024.01.21
 # lxml 4.9.3 supports Python 3.11 and retains the static build env used by p4a.
 requirements = python3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,python-pptx,lxml==4.9.3,typing_extensions==4.12.2,pillow==10.4.0
 # Files are selected through Android's system document picker (Storage Access Framework).
+android.manifest.intent_filters = ./intent_filters.xml
 # It grants access only to files the user chooses; broad storage permissions are unnecessary.
 android.api = 34
 android.minapi = 21
