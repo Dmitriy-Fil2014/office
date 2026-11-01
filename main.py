@@ -186,6 +186,16 @@ class DocumentLocalApp(MDApp):
         for label, mode in ([("Системная", "system"), ("Светлая", "light"), ("Тёмная", "dark")] if not en else [("System", "system"), ("Light", "light"), ("Dark", "dark")]):
             card.add_widget(MDFillRoundFlatButton(text=label, size_hint_x=1,
                 on_release=lambda *_, value=mode: (modal.dismiss(), self.set_theme_mode(value))))
+        card.add_widget(MDLabel(text="Документы и соглашения" if not en else "Documents & legal",
+                                size_hint_y=None, height="26dp", theme_text_color="Secondary"))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Политика конфиденциальности" if not en else "Privacy policy",
+            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+                "privacy_policy.txt", "Политика конфиденциальности" if not en else "Privacy Policy")))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Условия использования" if not en else "Terms of use",
+            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+                "terms_of_use.txt", "Условия использования" if not en else "Terms of Use")))
         card.add_widget(MDLabel(text="Язык" if not en else "Language",
                                 size_hint_y=None, height="26dp", theme_text_color="Secondary"))
         card.add_widget(MDFillRoundFlatButton(text="Русский", size_hint_x=1,
@@ -235,12 +245,10 @@ class DocumentLocalApp(MDApp):
         intro.bind(texture_size=lambda w, v: setattr(w, "height", v[1] + 12))
         scroll.add_widget(intro)
         card.add_widget(scroll)
-        card.add_widget(MDFillRoundFlatButton(text="Privacy policy" if en else "Политика конфиденциальности",
-            size_hint_x=1, on_release=lambda *_: self.view_doc_from_consent(
-                "privacy_policy.txt", "Privacy Policy" if en else "Политика конфиденциальности")))
-        card.add_widget(MDFillRoundFlatButton(text="Terms of use" if en else "Условия использования",
-            size_hint_x=1, on_release=lambda *_: self.view_doc_from_consent(
-                "terms_of_use.txt", "Terms of Use" if en else "Условия использования")))
+        card.add_widget(MDLabel(
+            text=("Политику конфиденциальности и условия использования можно открыть в настройках."
+                  if not en else "You can review the privacy policy and terms in Settings."),
+            theme_text_color="Secondary", size_hint_y=None, height="52dp"))
         card.add_widget(MDFillRoundFlatButton(text="I AGREE" if en else "СОГЛАСЕН",
             size_hint_x=1, on_release=self.accept_legal_agreements))
         modal.add_widget(card)
@@ -478,9 +486,9 @@ class DocumentLocalApp(MDApp):
         grid = GridLayout(cols=8, size_hint=(None, None), spacing="2dp",
                           row_default_height="42dp", row_force_default=True)
         grid.bind(minimum_width=grid.setter("width"), minimum_height=grid.setter("height"))
-        for row in values[:40]:
+        for row in values:
             cells = []
-            for value in row[:8]:
+            for value in row:
                 field = TextInput(text="" if value is None else str(value), multiline=False,
                                   size_hint=(None, None), size=("112dp", "42dp"),
                                   font_size="14sp", background_color=(0.94, 0.97, 1, 1),
@@ -495,13 +503,57 @@ class DocumentLocalApp(MDApp):
             self.spreadsheet_cells.append(cells)
         scroll.add_widget(grid)
         outer.add_widget(scroll)
-        actions = MDBoxLayout(size_hint_y=None, height="50dp", spacing="8dp")
+        self.spreadsheet_grid = grid
+        actions = MDBoxLayout(size_hint_y=None, height="50dp", spacing="5dp")
+        actions.add_widget(MDFillRoundFlatButton(text="+ Строка", on_release=lambda *_: self.add_spreadsheet_row()))
+        actions.add_widget(MDFillRoundFlatButton(text="+ Столбец", on_release=lambda *_: self.add_spreadsheet_column()))
         actions.add_widget(MDFillRoundFlatButton(text="Сохранить", on_release=lambda *_: (modal.dismiss(), self.save_changes_to_storage())))
         actions.add_widget(MDFillRoundFlatButton(text="Закрыть", on_release=lambda *_: modal.dismiss()))
         outer.add_widget(actions)
         modal.add_widget(outer)
         self.spreadsheet_view = modal
         modal.open()
+
+    def add_spreadsheet_row(self):
+        grid = getattr(self, "spreadsheet_grid", None)
+        cells = getattr(self, "spreadsheet_cells", None)
+        if grid is None or cells is None:
+            return
+        if len(cells) >= 500:
+            self.root.ids.status_label.text = "Достигнут лимит: 500 строк."
+            return
+        row = []
+        for _ in range(grid.cols):
+            field = TextInput(multiline=False, size_hint=(None, None),
+                              size=("112dp", "42dp"), font_size="14sp")
+            grid.add_widget(field)
+            row.append(field)
+        cells.append(row)
+
+    def add_spreadsheet_column(self):
+        grid = getattr(self, "spreadsheet_grid", None)
+        cells = getattr(self, "spreadsheet_cells", None)
+        if grid is None or cells is None or grid.cols >= 50:
+            return
+        for row in cells:
+            field = TextInput(multiline=False, size_hint=(None, None),
+                              size=("112dp", "42dp"), font_size="14sp")
+            grid.add_widget(field)
+            row.append(field)
+        grid.cols += 1
+
+    def add_table_to_word(self):
+        if self.current_file_format != "docx":
+            self.root.ids.status_label.text = "Таблицы доступны в документе Word (.docx)."
+            return
+        try:
+            self.current_file_bytes = self._get_processor().add_table_to_docx(
+                self.current_file_bytes, 3, 3)
+            self.root.ids.file_content_view.text = self._get_processor().read_word_bytes(
+                self.current_file_bytes)
+            self.root.ids.status_label.text = "Добавлена таблица 3×3."
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось добавить таблицу: " + str(exc)
 
     def add_slide_to_presentation(self):
         if self.current_file_format != "pptx":
@@ -538,7 +590,12 @@ class DocumentLocalApp(MDApp):
             return
         try:
             resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
-            data = self._read_android_stream(resolver.openInputStream(intent.getData()))
+            image_stream = resolver.openInputStream(intent.getData())
+            if image_stream is None:
+                raise IOError("Android не предоставил доступ к выбранному изображению.")
+            data = self._read_android_stream(image_stream)
+            if not data:
+                raise ValueError("Выбранное изображение пустое или недоступно.")
             processor = self._get_processor()
             if self.current_file_format == "pptx":
                 self.current_file_bytes = processor.add_image_to_pptx(self.current_file_bytes, data)
@@ -620,10 +677,6 @@ class DocumentLocalApp(MDApp):
         card.add_widget(MDLabel(text=("Documents are processed locally on this device."
                                      if en else "Документы обрабатываются локально на этом устройстве."),
                                 theme_text_color="Secondary"))
-        card.add_widget(MDFillRoundFlatButton(text="Privacy policy" if en else "Политика конфиденциальности",
-            size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.show_legal_doc("privacy_policy.txt", "Privacy Policy" if en else "Политика конфиденциальности"))))
-        card.add_widget(MDFillRoundFlatButton(text="Terms of use" if en else "Условия использования",
-            size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.show_legal_doc("terms_of_use.txt", "Terms of Use" if en else "Условия использования"))))
         modal.add_widget(card)
         self.info_view = modal
         modal.open()
