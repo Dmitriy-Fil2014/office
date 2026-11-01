@@ -560,6 +560,8 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Добавление слайдов доступно в PowerPoint."
             return
         try:
+            self.current_file_bytes = self._get_processor().modify_pptx_bytes(
+                self.current_file_bytes, self.root.ids.file_content_view.text)
             self.current_file_bytes = self._get_processor().add_slide_to_pptx(self.current_file_bytes)
             self.root.ids.file_content_view.text = self._get_processor().read_pptx_bytes(self.current_file_bytes)
             self.root.ids.status_label.text = "Добавлен новый слайд. Нажмите «Сохранить»."
