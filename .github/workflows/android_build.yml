@@ -127,7 +127,13 @@ jobs:
           # DOCX embedded image extraction must work for the preview.
           image_stream = io.BytesIO()
           Image.new("RGB", (16, 16), "blue").save(image_stream, format="PNG")
-          with_image = DocumentProcessor.add_image_to_docx(original.getvalue(), image_stream.getvalue())
+          sample_image = image_stream.getvalue()
+          assert DocumentProcessor.detect_format("photo.png", file_bytes=sample_image) == "image"
+          assert DocumentProcessor.detect_format("photo.jpg", file_bytes=sample_image) == "image"
+          normalized = DocumentProcessor.normalize_image_bytes(sample_image)
+          with Image.open(io.BytesIO(normalized)) as decoded:
+              assert decoded.format == "PNG" and decoded.size == (16, 16)
+          with_image = DocumentProcessor.add_image_to_docx(original.getvalue(), sample_image)
           assert len(DocumentProcessor.extract_docx_images(with_image)) == 1
 
           # PPTX: new slide and image are retained in the package.
