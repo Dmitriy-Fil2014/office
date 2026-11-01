@@ -153,7 +153,7 @@ class DocumentLocalApp(MDApp):
                 readers = {"txt": processor.read_txt_bytes, "docx": processor.read_word_bytes,
                            "pdf": processor.read_pdf_bytes, "pptx": processor.read_pptx_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
-                self.root.ids.editor_card.height = self.root.height * 0.60
+                self.root.ids.editor_card.height = self.root.height * 0.76
                 self.root.ids.editor_card.opacity = 1
             self.root.ids.save_btn.disabled = False
             self.root.ids.status_label.text = "Открыт документ: " + self.current_file_name
@@ -343,10 +343,18 @@ class DocumentLocalApp(MDApp):
         intro.bind(texture_size=lambda w, v: setattr(w, "height", v[1] + 12))
         scroll.add_widget(intro)
         card.add_widget(scroll)
+        card.add_widget(MDFillRoundFlatButton(
+            text="Прочитать политику конфиденциальности" if not en else "Read privacy policy",
+            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+                "privacy_policy.txt", "Политика конфиденциальности" if not en else "Privacy Policy")))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Прочитать условия использования" if not en else "Read terms of use",
+            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+                "terms_of_use.txt", "Условия использования" if not en else "Terms of Use")))
         card.add_widget(MDLabel(
-            text=("Политику конфиденциальности и условия использования можно открыть в настройках."
-                  if not en else "You can review the privacy policy and terms in Settings."),
-            theme_text_color="Secondary", size_hint_y=None, height="52dp"))
+            text=("Ознакомьтесь с обоими документами перед согласием."
+                  if not en else "Please review both documents before accepting."),
+            theme_text_color="Secondary", size_hint_y=None, height="36dp"))
         card.add_widget(MDFillRoundFlatButton(text="I AGREE" if en else "СОГЛАСЕН",
             size_hint_x=1, on_release=self.accept_legal_agreements))
         modal.add_widget(card)
