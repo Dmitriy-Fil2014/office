@@ -33,7 +33,7 @@ class DocumentLocalApp(MDApp):
     def build(self):
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.accent_palette = "LightBlue"
-        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "system"})
+        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "ru"})
         try:
             return Builder.load_file("app.kv")
         except Exception as exc:
@@ -120,16 +120,25 @@ class DocumentLocalApp(MDApp):
         mode = self.config.get("General", "theme_mode")
         self.theme_cls.theme_style = self._system_theme() if mode == "system" else ("Dark" if mode == "dark" else "Light")
         lang = self.config.get("General", "language")
-        self.language = self._system_language() if lang == "system" else lang
+        # Russian is the fixed first-run default on every device.
+        if lang not in ("ru", "en"):
+            lang = "ru"
+            self.config.set("General", "language", "ru")
+            self.config.write()
+        self.language = lang
         self._refresh_language()
 
     def _refresh_language(self):
         en = getattr(self, "language", "ru") == "en"
         try:
-            self.root.ids.status_label.text = "Choose a file. Changes overwrite the document." if en else "Выберите файл. Изменения перезапишут документ."
-            self.root.ids.open_btn.text = "OPEN FILE" if en else "ОТКРЫТЬ ФАЙЛ"
-            self.root.ids.save_btn.text = "SAVE" if en else "СОХРАНИТЬ"
-            self.root.ids.file_content_view.hint_text = "Document text will appear here" if en else "Содержимое документа отобразится здесь"
+            self.root.ids.app_title.text = "Leaf" if en else "Лист"
+            self.root.ids.workspace_title.text = "Your workspace" if en else "Ваше рабочее пространство"
+            self.root.ids.editor_title.text = "Document editor" if en else "Редактор документов"
+            self.root.ids.status_label.text = "Choose a file or create a new document." if en else "Откройте файл или создайте новый документ."
+            self.root.ids.create_btn.text = "Create" if en else "Создать"
+            self.root.ids.open_btn.text = "Open file" if en else "Открыть файл"
+            self.root.ids.save_btn.text = "Save" if en else "Сохранить"
+            self.root.ids.file_content_view.hint_text = "Document text will appear here" if en else "Здесь появится текст документа"
         except Exception:
             pass
 
@@ -156,7 +165,7 @@ class DocumentLocalApp(MDApp):
                 MDFlatButton(text="LIGHT" if en else "СВЕТЛАЯ", on_release=lambda x: self.set_theme_mode("light")),
                 MDFlatButton(text="РУССКИЙ", on_release=lambda x: self.set_language("ru")),
                 MDFlatButton(text="ENGLISH", on_release=lambda x: self.set_language("en")),
-                MDFlatButton(text="SYSTEM LANG" if en else "ЯЗЫК СИСТЕМЫ", on_release=lambda x: self.set_language("system")),
+
             ],
         )
         self.dialog.open()
@@ -442,7 +451,7 @@ class DocumentLocalApp(MDApp):
                 self._start_create_document()
                 return
             resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
-            stream = resolver.openOutputStream(self.current_uri, "rwt")
+            stream = resolver.openOutputStream(self.current_uri, "wt")
             if stream is None:
                 raise IOError("Android не предоставил поток записи для этого файла.")
             try:
