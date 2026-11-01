@@ -726,14 +726,40 @@ class DocumentLocalApp(MDApp):
 
     def add_table_to_word(self):
         if self.current_file_format != "docx":
-            self.root.ids.status_label.text = "Таблицы доступны в документе Word (.docx)."
+            self.root.ids.status_label.text = "Сначала откройте документ Word (.docx)."
             return
+        modal = ModalView(size_hint=(0.92, 0.82), auto_dismiss=True)
+        outer = MDBoxLayout(orientation="vertical", padding="12dp", spacing="8dp")
+        outer.add_widget(MDLabel(text="Вставить таблицу — выберите размер",
+                                 size_hint_y=None, height="42dp", halign="center", bold=True))
+        outer.add_widget(MDLabel(text="Нажмите на квадратик в нужном столбце и строке",
+                                 size_hint_y=None, height="34dp", halign="center",
+                                 theme_text_color="Secondary"))
+        grid = GridLayout(cols=8, spacing="3dp", size_hint=(1, 1))
+        for r in range(1, 9):
+            for c in range(1, 9):
+                cell = MDFillRoundFlatButton(
+                    text="□", size_hint=(1, 1),
+                    on_release=lambda *_ , rows=r, cols=c:
+                        self._insert_word_table(rows, cols, modal))
+                grid.add_widget(cell)
+        outer.add_widget(grid)
+        outer.add_widget(MDFillRoundFlatButton(
+            text="Отмена", size_hint_x=1, size_hint_y=None, height="44dp",
+            on_release=lambda *_: modal.dismiss()))
+        modal.add_widget(outer)
+        self.word_table_picker = modal
+        modal.open()
+
+    def _insert_word_table(self, rows, cols, modal=None):
         try:
             self.current_file_bytes = self._get_processor().add_table_to_docx(
-                self.current_file_bytes, 3, 3)
+                self.current_file_bytes, rows, cols)
             self.root.ids.file_content_view.text = self._get_processor().read_word_bytes(
                 self.current_file_bytes)
-            self.root.ids.status_label.text = "Добавлена таблица 3×3."
+            if modal:
+                modal.dismiss()
+            self.root.ids.status_label.text = "Добавлена таблица " + str(rows) + "×" + str(cols) + ". Нажмите «Сохранить»."
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось добавить таблицу: " + str(exc)
 
@@ -806,15 +832,23 @@ class DocumentLocalApp(MDApp):
             try:
                 values = [[cell.text for cell in row] for row in self.spreadsheet_cells]
                 self.current_file_bytes = self._get_processor().modify_excel_grid(self.current_file_bytes, values)
-                if not self.current_uri:
+                local_path = getattr(self, "current_local_path", None)
+                if local_path:
+                    with open(local_path, "wb") as stream:
+                        stream.write(self.current_file_bytes)
+                elif not self.current_uri:
                     self.pending_create_bytes = self.current_file_bytes
                     self._start_create_document()
                 else:
                     resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
                     stream = resolver.openOutputStream(self.current_uri, "wt")
-                    stream.write(self.current_file_bytes)
-                    stream.flush()
-                    stream.close()
+                    if stream is None:
+                        raise IOError("Android не предоставил доступ для записи.")
+                    try:
+                        stream.write(self.current_file_bytes)
+                        stream.flush()
+                    finally:
+                        stream.close()
                 self.root.ids.status_label.text = "Таблица сохранена."
             except Exception as exc:
                 self.root.ids.status_label.text = "Ошибка сохранения таблицы: " + str(exc)
@@ -824,6 +858,14 @@ class DocumentLocalApp(MDApp):
             return
         try:
             updated = self._build_updated_document()
+            local_path = getattr(self, "current_local_path", None)
+            if local_path:
+                with open(local_path, "wb") as stream:
+                    stream.write(updated)
+                self.current_file_bytes = updated
+                self.root.ids.status_label.text = f"Файл {self.current_file_name} успешно сохранён."
+                self.refresh_document_list()
+                return
             if not self.current_uri:
                 self.pending_create_bytes = updated
                 self._start_create_document()
