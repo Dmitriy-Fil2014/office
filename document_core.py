@@ -27,8 +27,18 @@ class DocumentProcessor:
         return output.getvalue()
 
     @staticmethod
-    def detect_format(file_name, mime_type=""):
+    def detect_format(file_name, mime_type="", file_bytes=None):
         extension = os.path.splitext(str(file_name).lower())[1]
+        if file_bytes:
+            if file_bytes.startswith(b"%PDF-"):
+                return "pdf"
+            if file_bytes.startswith(b"PK\\x03\\x04"):
+                if extension == ".xlsx":
+                    return "xlsx"
+                if extension == ".pptx":
+                    return "pptx"
+                if extension == ".docx":
+                    return "docx"
         by_extension = {
             ".txt": "txt",
             ".docx": "docx",
