@@ -114,6 +114,26 @@ jobs:
           reopened_xlsx = load_workbook(io.BytesIO(edited_xlsx))
           assert reopened_xlsx.active["A1"].value == "New"
           assert reopened_xlsx["Keep"]["A1"].value == "Preserve"
+          # XLSX cell-grid editing and ZIP signature validation.
+          grid_source = DocumentProcessor.create_document_bytes("xlsx")
+          assert DocumentProcessor.detect_format("sheet.xlsx", file_bytes=grid_source) == "xlsx"
+          grid = DocumentProcessor.read_excel_grid(grid_source)
+          grid[0][0] = "Grid cell"
+          grid_result = DocumentProcessor.modify_excel_grid(grid_source, grid)
+          assert load_workbook(io.BytesIO(grid_result)).active["A1"].value == "Grid cell"
+
+          # PPTX: new slide and image are retained in the package.
+          from pptx import Presentation
+          from PIL import Image
+          pptx_source = DocumentProcessor.create_document_bytes("pptx")
+          pptx_source = DocumentProcessor.add_slide_to_pptx(pptx_source)
+          image_stream = io.BytesIO()
+          Image.new("RGB", (16, 16), "red").save(image_stream, format="PNG")
+          pptx_result = DocumentProcessor.add_image_to_pptx(pptx_source, image_stream.getvalue())
+          presentation = Presentation(io.BytesIO(pptx_result))
+          assert len(presentation.slides) == 2
+          assert any(shape.shape_type == 13 for shape in presentation.slides[-1].shapes)
+
           print("Document processing tests passed.")
           PY
 
