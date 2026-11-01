@@ -1,5 +1,5 @@
 MDScreen:
-    md_bg_color: 0.95, 0.97, 1, 1
+    md_bg_color: (0.95, 0.97, 1, 1) if app.theme_cls.theme_style == 'Light' else (0.055, 0.075, 0.12, 1)
 
     FloatLayout:
         MDBoxLayout:
@@ -12,7 +12,7 @@ MDScreen:
                 title: "Лист"
                 elevation: 0
                 md_bg_color: 0.95, 0.97, 1, 1
-                specific_text_color: 0.10, 0.18, 0.30, 1
+                specific_text_color: (0.10, 0.18, 0.30, 1) if app.theme_cls.theme_style == 'Light' else (0.95, 0.97, 1, 1)
                 right_action_items: [["image-plus", lambda x: app.add_picture_to_document()], ["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
 
             MDCard:
@@ -23,23 +23,21 @@ MDScreen:
                 height: "112dp"
                 radius: [22, 22, 22, 22]
                 elevation: 2
-                md_bg_color: 1, 1, 1, 1
+                md_bg_color: app.theme_cls.bg_normal
 
                 MDLabel:
                     id: workspace_title
                     text: "Ваше рабочее пространство"
                     font_style: "H6"
                     bold: True
-                    theme_text_color: "Custom"
-                    text_color: 0.10, 0.18, 0.30, 1
+                    theme_text_color: "Primary"
                     size_hint_y: None
                     height: "34dp"
 
                 MDLabel:
                     id: status_label
                     text: "Создавайте и редактируйте документы на устройстве"
-                    theme_text_color: "Custom"
-                    text_color: 0.35, 0.42, 0.52, 1
+                    theme_text_color: "Secondary"
                     font_style: "Body2"
                     size_hint_y: None
                     height: "42dp"
@@ -72,8 +70,7 @@ MDScreen:
                         text: "Редактор документов"
                         font_style: "Subtitle1"
                         bold: True
-                        theme_text_color: "Custom"
-                        text_color: 0.10, 0.18, 0.30, 1
+                        theme_text_color: "Primary"
 
                 ScrollView:
                     do_scroll_x: False
