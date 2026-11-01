@@ -131,7 +131,7 @@ class DocumentLocalApp(MDApp):
     def _refresh_language(self):
         en = getattr(self, "language", "ru") == "en"
         try:
-            self.root.ids.app_title.text = "Leaf" if en else "Лист"
+            self.root.ids.app_title.title = "Leaf" if en else "Лист"
             self.root.ids.workspace_title.text = "Your workspace" if en else "Ваше рабочее пространство"
             self.root.ids.editor_title.text = "Document editor" if en else "Редактор документов"
             self.root.ids.status_label.text = "Choose a file or create a new document." if en else "Откройте файл или создайте новый документ."
