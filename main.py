@@ -219,30 +219,33 @@ class DocumentLocalApp(MDApp):
                 pass
 
     def show_mandatory_consent_dialog(self):
-        policy_btn = MDFlatButton(
-            text="ПОЛИТИКА",
-            on_release=lambda x: self.view_doc_from_consent(
-                "privacy_policy.txt", "Политика конфиденциальности"
-            ),
-        )
-        terms_btn = MDFlatButton(
-            text="УСЛОВИЯ",
-            on_release=lambda x: self.view_doc_from_consent(
-                "terms_of_use.txt", "Условия использования"
-            ),
-        )
-        accept_btn = MDFillRoundFlatButton(
-            text="СОГЛАСЕН",
-            on_release=self.accept_legal_agreements,
-        )
-        self.consent_dialog = MDDialog(
-            title="Ознакомление с условиями",
-            text="Приложение работает локально на вашем устройстве. "
-                 "Нажимая кнопку согласия, вы принимаете правила работы приложения.",
-            buttons=[policy_btn, terms_btn, accept_btn],
-            auto_dismiss=False,
-        )
-        self.consent_dialog.open()
+        en = getattr(self, "language", "ru") == "en"
+        modal = ModalView(size_hint=(0.92, 0.80), auto_dismiss=False,
+                          background_color=(0.02, 0.05, 0.12, 0.65))
+        card = MDCard(orientation="vertical", padding="18dp", spacing="10dp",
+                      radius=[24, 24, 24, 24], elevation=8,
+                      md_bg_color=self.theme_cls.bg_normal)
+        card.add_widget(MDLabel(text="Welcome to Leaf" if en else "Добро пожаловать в «Лист»",
+                                font_style="H6", bold=True, size_hint_y=None, height="44dp"))
+        scroll = ScrollView(do_scroll_x=False)
+        intro = MDLabel(text=("Select a document to open it. Files are processed on your device."
+                              if en else "Выберите документ, чтобы открыть его. Файлы обрабатываются на вашем устройстве."),
+                        size_hint_y=None, halign="left", valign="top")
+        intro.bind(width=lambda w, v: setattr(w, "text_size", (v, None)))
+        intro.bind(texture_size=lambda w, v: setattr(w, "height", v[1] + 12))
+        scroll.add_widget(intro)
+        card.add_widget(scroll)
+        card.add_widget(MDFillRoundFlatButton(text="Privacy policy" if en else "Политика конфиденциальности",
+            size_hint_x=1, on_release=lambda *_: self.view_doc_from_consent(
+                "privacy_policy.txt", "Privacy Policy" if en else "Политика конфиденциальности")))
+        card.add_widget(MDFillRoundFlatButton(text="Terms of use" if en else "Условия использования",
+            size_hint_x=1, on_release=lambda *_: self.view_doc_from_consent(
+                "terms_of_use.txt", "Terms of Use" if en else "Условия использования")))
+        card.add_widget(MDFillRoundFlatButton(text="I AGREE" if en else "СОГЛАСЕН",
+            size_hint_x=1, on_release=self.accept_legal_agreements))
+        modal.add_widget(card)
+        self.consent_dialog = modal
+        modal.open()
 
     def view_doc_from_consent(self, filename, title_text):
         self.show_legal_doc(filename, title_text)
@@ -254,17 +257,21 @@ class DocumentLocalApp(MDApp):
             self.consent_dialog.dismiss()
 
     def show_new_document_menu(self):
-        self.dialog = MDDialog(
-            title="Создать документ",
-            text="Выберите формат нового файла",
-            buttons=[
-                MDFlatButton(text="WORD", on_release=lambda x: self.create_new_document("docx")),
-                MDFlatButton(text="EXCEL", on_release=lambda x: self.create_new_document("xlsx")),
-                MDFlatButton(text="POWERPOINT", on_release=lambda x: self.create_new_document("pptx")),
-                MDFlatButton(text="TXT", on_release=lambda x: self.create_new_document("txt")),
-            ],
-        )
-        self.dialog.open()
+        en = getattr(self, "language", "ru") == "en"
+        modal = ModalView(size_hint=(0.88, 0.72), auto_dismiss=True,
+                          background_color=(0.02, 0.05, 0.12, 0.62))
+        card = MDCard(orientation="vertical", padding="18dp", spacing="10dp",
+                      radius=[24, 24, 24, 24], elevation=8,
+                      md_bg_color=self.theme_cls.bg_normal)
+        card.add_widget(MDLabel(text="Create a document" if en else "Создать документ",
+                                font_style="H6", bold=True, size_hint_y=None, height="42dp"))
+        for label, fmt in [("Word (.docx)", "docx"), ("Excel (.xlsx)", "xlsx"),
+                           ("PowerPoint (.pptx)", "pptx"), ("Text (.txt)", "txt")]:
+            card.add_widget(MDFillRoundFlatButton(text=label, size_hint_x=1,
+                on_release=lambda *_ , value=fmt: (modal.dismiss(), self.create_new_document(value))))
+        modal.add_widget(card)
+        self.create_menu = modal
+        modal.open()
 
     def create_new_document(self, file_format):
         try:
@@ -597,29 +604,24 @@ class DocumentLocalApp(MDApp):
             return "Файл соглашения не найден."
 
     def show_info_menu(self):
-        self.dialog = MDDialog(
-            title="Информация",
-            text="Документы обрабатываются локально на устройстве.",
-            buttons=[
-                MDFlatButton(
-                    text="ПОЛИТИКА",
-                    on_release=lambda x: self.show_legal_doc(
-                        "privacy_policy.txt", "Политика"
-                    ),
-                ),
-                MDFlatButton(
-                    text="УСЛОВИЯ",
-                    on_release=lambda x: self.show_legal_doc(
-                        "terms_of_use.txt", "Условия"
-                    ),
-                ),
-                MDFlatButton(
-                    text="ЗАКРЫТЬ",
-                    on_release=lambda x: self.dialog.dismiss(),
-                ),
-            ],
-        )
-        self.dialog.open()
+        en = getattr(self, "language", "ru") == "en"
+        modal = ModalView(size_hint=(0.90, 0.58), auto_dismiss=True,
+                          background_color=(0.02, 0.05, 0.12, 0.62))
+        card = MDCard(orientation="vertical", padding="18dp", spacing="10dp",
+                      radius=[24, 24, 24, 24], elevation=8,
+                      md_bg_color=self.theme_cls.bg_normal)
+        card.add_widget(MDLabel(text="Information" if en else "Информация",
+                                font_style="H6", bold=True, size_hint_y=None, height="42dp"))
+        card.add_widget(MDLabel(text=("Documents are processed locally on this device."
+                                     if en else "Документы обрабатываются локально на этом устройстве."),
+                                theme_text_color="Secondary"))
+        card.add_widget(MDFillRoundFlatButton(text="Privacy policy" if en else "Политика конфиденциальности",
+            size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.show_legal_doc("privacy_policy.txt", "Privacy Policy" if en else "Политика конфиденциальности"))))
+        card.add_widget(MDFillRoundFlatButton(text="Terms of use" if en else "Условия использования",
+            size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.show_legal_doc("terms_of_use.txt", "Terms of Use" if en else "Условия использования"))))
+        modal.add_widget(card)
+        self.info_view = modal
+        modal.open()
 
     def show_legal_doc(self, filename, title_text):
         if getattr(self, "language", "ru") == "en":
