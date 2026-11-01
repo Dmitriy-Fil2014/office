@@ -186,7 +186,7 @@ jobs:
           ls -lh dist/
 
       - name: Upload APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: List-APK
