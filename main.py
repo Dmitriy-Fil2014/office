@@ -917,8 +917,7 @@ class DocumentLocalApp(MDApp):
     def show_fullscreen_text_editor(self, text):
         modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
                           background_color=(0.02, 0.04, 0.08, 0.88))
-        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp",
-                            md_bg_color=self.theme_cls.bg_normal)
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
         header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Редактор",
                                   bold=True, valign="middle"))
@@ -942,8 +941,7 @@ class DocumentLocalApp(MDApp):
         text = processor.read_word_bytes(self.current_file_bytes)
         modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
                           background_color=(0.02, 0.04, 0.08, 0.92))
-        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp",
-                            md_bg_color=self.theme_cls.bg_normal)
+        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
         header = MDBoxLayout(size_hint_y=None, height="46dp", spacing="5dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Word",
                                   bold=True, valign="middle"))
@@ -1007,8 +1005,7 @@ class DocumentLocalApp(MDApp):
         slides = processor.extract_pptx_slides(self.current_file_bytes)
         modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
                           background_color=(0.02, 0.04, 0.08, 0.92))
-        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp",
-                            md_bg_color=self.theme_cls.bg_normal)
+        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
         header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="5dp")
         header.add_widget(MDLabel(text=self.current_file_name or "PowerPoint",
                                   bold=True, valign="middle"))
