@@ -1,5 +1,6 @@
 import io
 import os
+import zipfile
 
 
 class DocumentProcessor:
@@ -89,6 +90,8 @@ class DocumentProcessor:
     @staticmethod
     def read_word_bytes(file_bytes):
         from docx import Document
+        if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+            raise ValueError('Выбранный файл не является корректным DOCX. Возможно, это старый формат DOC или файл повреждён.')
         document = Document(io.BytesIO(file_bytes))
         paragraphs = list(DocumentProcessor._iter_word_paragraphs(document))
         return "\n".join(paragraph.text for paragraph in paragraphs)
@@ -126,9 +129,64 @@ class DocumentProcessor:
         document.save(output)
         return output.getvalue()
 
+
+    @staticmethod
+    def read_excel_grid(file_bytes):
+        from openpyxl import load_workbook
+        if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+            raise ValueError("Файл XLSX повреждён или имеет неверный формат.")
+        workbook = load_workbook(io.BytesIO(file_bytes), data_only=False)
+        try:
+            sheet = workbook.active
+            rows = max(sheet.max_row, 12)
+            cols = max(sheet.max_column, 8)
+            return [[sheet.cell(row=r, column=c).value for c in range(1, cols + 1)]
+                    for r in range(1, rows + 1)]
+        finally:
+            workbook.close()
+
+    @staticmethod
+    def modify_excel_grid(old_bytes, values):
+        from openpyxl import load_workbook
+        workbook = load_workbook(io.BytesIO(old_bytes), data_only=False)
+        try:
+            sheet = workbook.active
+            for r, row in enumerate(values, start=1):
+                for c, value in enumerate(row, start=1):
+                    cell = sheet.cell(row=r, column=c)
+                    if cell.__class__.__name__ != "MergedCell":
+                        cell.value = DocumentProcessor._parse_excel_value(str(value))
+            output = io.BytesIO()
+            workbook.save(output)
+            return output.getvalue()
+        finally:
+            workbook.close()
+
+    @staticmethod
+    def add_image_to_pptx(old_bytes, image_bytes):
+        from pptx import Presentation
+        presentation = Presentation(io.BytesIO(old_bytes))
+        slide = presentation.slides[-1] if presentation.slides else presentation.slides.add_slide(presentation.slide_layouts[6])
+        slide.shapes.add_picture(io.BytesIO(image_bytes), 914400, 914400, width=5486400)
+        output = io.BytesIO()
+        presentation.save(output)
+        return output.getvalue()
+
+    @staticmethod
+    def add_image_to_docx(old_bytes, image_bytes):
+        from docx import Document
+        from docx.shared import Inches
+        document = Document(io.BytesIO(old_bytes))
+        document.add_picture(io.BytesIO(image_bytes), width=Inches(4.5))
+        output = io.BytesIO()
+        document.save(output)
+        return output.getvalue()
+
     @staticmethod
     def read_excel_bytes(file_bytes):
         from openpyxl import load_workbook
+        if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+            raise ValueError('Выбранный файл не является корректной книгой XLSX. Проверьте расширение или целостность файла.')
         workbook = load_workbook(io.BytesIO(file_bytes), data_only=False)
         try:
             sheet = workbook.active
@@ -205,6 +263,8 @@ class DocumentProcessor:
     @staticmethod
     def read_pptx_bytes(file_bytes):
         from pptx import Presentation
+        if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+            raise ValueError('Выбранный файл не является корректной презентацией PPTX. Возможно, это старый формат PPT или файл повреждён.')
         presentation = Presentation(io.BytesIO(file_bytes))
         lines = []
         for number, slide in enumerate(presentation.slides, start=1):
