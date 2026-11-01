@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/leaf-loading-and-editor-ui
 
 permissions:
   contents: read
@@ -122,6 +123,12 @@ jobs:
           grid_result = DocumentProcessor.modify_excel_grid(grid_source, grid)
           assert load_workbook(io.BytesIO(grid_result)).active["A1"].value == "Grid cell"
 
+          # DOCX embedded image extraction must work for the preview.
+          image_stream = io.BytesIO()
+          Image.new("RGB", (16, 16), "blue").save(image_stream, format="PNG")
+          with_image = DocumentProcessor.add_image_to_docx(original.getvalue(), image_stream.getvalue())
+          assert len(DocumentProcessor.extract_docx_images(with_image)) == 1
+
           # PPTX: new slide and image are retained in the package.
           from pptx import Presentation
           from PIL import Image
@@ -133,6 +140,9 @@ jobs:
           presentation = Presentation(io.BytesIO(pptx_result))
           assert len(presentation.slides) == 2
           assert any(shape.shape_type == 13 for shape in presentation.slides[-1].shapes)
+          slide_data = DocumentProcessor.extract_pptx_slides(pptx_result)
+          assert len(slide_data) == 2
+          assert slide_data[-1]["images"]
 
           print("Document processing tests passed.")
           PY
