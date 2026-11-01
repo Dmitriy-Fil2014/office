@@ -58,9 +58,106 @@ class DocumentLocalApp(MDApp):
             self.apply_preferences()
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
+        # Request Android storage access as soon as the first screen is ready.
+        Clock.schedule_once(self.request_all_files_access, 0.85)
         Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._hide_splash, 0.75)
         Clock.schedule_once(self._open_shared_file, 1.0)
+        Clock.schedule_once(lambda _dt: self.refresh_document_list(), 1.2)
+
+    def request_all_files_access(self, *_):
+        if platform != "android":
+            return
+        try:
+            BuildVersion = autoclass("android.os.Build$VERSION")
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            if int(BuildVersion.SDK_INT) >= 30:
+                Environment = autoclass("android.os.Environment")
+                if not Environment.isExternalStorageManager():
+                    Intent = autoclass("android.content.Intent")
+                    Uri = autoclass("android.net.Uri")
+                    intent = Intent("android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION")
+                    intent.setData(Uri.parse("package:" + str(current.getPackageName())))
+                    current.startActivityForResult(intent, 1016)
+                else:
+                    Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.2)
+            else:
+                permissions = ["android.permission.READ_EXTERNAL_STORAGE",
+                               "android.permission.WRITE_EXTERNAL_STORAGE"]
+                current.requestPermissions(permissions, 1017)
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
+
+    def on_resume(self):
+        try:
+            Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.5)
+        except Exception:
+            pass
+
+    def refresh_document_list(self):
+        try:
+            container = self.root.ids.documents_list
+            container.clear_widgets()
+            if platform != "android":
+                container.add_widget(MDLabel(text="Документы появятся здесь после предоставления доступа к хранилищу.",
+                                             size_hint_y=None, height="48dp"))
+                return
+            BuildVersion = autoclass("android.os.Build$VERSION")
+            if int(BuildVersion.SDK_INT) >= 30:
+                Environment = autoclass("android.os.Environment")
+                if not Environment.isExternalStorageManager():
+                    container.add_widget(MDLabel(text="Разрешите доступ ко всем файлам в настройках Android.",
+                                                 size_hint_y=None, height="48dp"))
+                    return
+            root_path = str(autoclass("android.os.Environment").getExternalStorageDirectory().getAbsolutePath())
+            allowed = (".docx", ".xlsx", ".pptx", ".pdf", ".txt")
+            found = []
+            for base, dirs, files in os.walk(root_path):
+                dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails")]
+                for filename in files:
+                    if filename.lower().endswith(allowed):
+                        path = os.path.join(base, filename)
+                        found.append(path)
+                if len(found) >= 500:
+                    break
+            found.sort(key=lambda p: os.path.basename(p).lower())
+            for path in found:
+                name = os.path.basename(path)
+                button = MDFillRoundFlatButton(
+                    text=name, size_hint_x=1,
+                    on_release=lambda *_ , selected=path: self.open_local_document(selected))
+                container.add_widget(button)
+            if not found:
+                container.add_widget(MDLabel(text="Документы не найдены. Поддерживаются DOCX, XLSX, PPTX, PDF и TXT.",
+                                             size_hint_y=None, height="56dp"))
+            self.root.ids.status_label.text = "Документов найдено: " + str(len(found))
+        except Exception as exc:
+            try:
+                self.root.ids.status_label.text = "Не удалось загрузить список документов: " + str(exc)
+            except Exception:
+                pass
+
+    def open_local_document(self, path):
+        try:
+            processor = self._get_processor()
+            with open(path, "rb") as stream:
+                data = stream.read()
+            self.current_local_path = path
+            self.current_uri = None
+            self.current_file_name = os.path.basename(path)
+            self.current_file_bytes = data
+            self.current_file_format = processor.detect_format(self.current_file_name, "", data)
+            if self.current_file_format == "xlsx":
+                self.show_spreadsheet_editor()
+            else:
+                readers = {"txt": processor.read_txt_bytes, "docx": processor.read_word_bytes,
+                           "pdf": processor.read_pdf_bytes, "pptx": processor.read_pptx_bytes}
+                self.root.ids.file_content_view.text = readers[self.current_file_format](data)
+                self.root.ids.editor_card.height = self.root.height * 0.60
+                self.root.ids.editor_card.opacity = 1
+            self.root.ids.save_btn.disabled = False
+            self.root.ids.status_label.text = "Открыт документ: " + self.current_file_name
+        except Exception as exc:
+            self.root.ids.status_label.text = "Ошибка открытия документа: " + str(exc)
 
     def _open_shared_file(self, _dt):
         if platform != "android":
@@ -373,10 +470,13 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = f"Не удалось открыть выбор файла: {exc}"
 
     def on_file_selected(self, request_code, result_code, intent):
-        if request_code not in (1012, 1013, 1015):
+        if request_code not in (1012, 1013, 1015, 1016):
             return
         activity.unbind(on_activity_result=self.on_file_selected)
         Activity = autoclass("android.app.Activity")
+        if request_code == 1016:
+            Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.6)
+            return
         if result_code == Activity.RESULT_OK and intent is not None:
             self.current_uri = intent.getData()
             if request_code == 1015:
