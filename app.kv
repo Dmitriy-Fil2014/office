@@ -8,6 +8,7 @@ MDScreen:
             spacing: "14dp"
 
             MDTopAppBar:
+                id: app_title
                 title: "Лист"
                 elevation: 0
                 md_bg_color: 0.95, 0.97, 1, 1
@@ -25,6 +26,7 @@ MDScreen:
                 md_bg_color: 1, 1, 1, 1
 
                 MDLabel:
+                    id: workspace_title
                     text: "Ваше рабочее пространство"
                     font_style: "H6"
                     bold: True
@@ -62,6 +64,7 @@ MDScreen:
                         size_hint_x: None
                         width: "28dp"
                     MDLabel:
+                        id: editor_title
                         text: "Редактор документов"
                         font_style: "Subtitle1"
                         bold: True
@@ -90,6 +93,7 @@ MDScreen:
                 height: "54dp"
 
                 MDFillRoundFlatIconButton:
+                    id: create_btn
                     text: "Создать"
                     icon: "plus-circle"
                     on_release: app.show_new_document_menu()
