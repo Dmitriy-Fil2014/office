@@ -30,15 +30,21 @@ class DocumentProcessor:
     def detect_format(file_name, mime_type="", file_bytes=None):
         extension = os.path.splitext(str(file_name).lower())[1]
         if file_bytes:
-            if file_bytes.startswith(b"%PDF-"):
+            if file_bytes.lstrip().startswith(b"%PDF-"):
                 return "pdf"
-            if file_bytes.startswith(b"PK\x03\x04"):
-                if extension == ".xlsx":
-                    return "xlsx"
-                if extension == ".pptx":
-                    return "pptx"
-                if extension == ".docx":
-                    return "docx"
+            # Determine Office format from the internal package structure.
+            try:
+                with zipfile.ZipFile(io.BytesIO(file_bytes)) as package:
+                    members = set(package.namelist())
+                if "[Content_Types].xml" in members:
+                    if "word/document.xml" in members:
+                        return "docx"
+                    if "xl/workbook.xml" in members:
+                        return "xlsx"
+                    if "ppt/presentation.xml" in members:
+                        return "pptx"
+            except (zipfile.BadZipFile, OSError):
+                pass
         by_extension = {
             ".txt": "txt",
             ".docx": "docx",
