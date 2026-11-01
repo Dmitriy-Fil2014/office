@@ -30,6 +30,18 @@ class DocumentProcessor:
     def detect_format(file_name, mime_type="", file_bytes=None):
         extension = os.path.splitext(str(file_name).lower())[1]
         if file_bytes:
+            # Identify common image formats by their file signatures as well as
+            # their extension. Android document providers often omit MIME types.
+            if file_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+                return "image"
+            if file_bytes.startswith(b"\\xff\\xd8\\xff"):
+                return "image"
+            if file_bytes.startswith((b"GIF87a", b"GIF89a")):
+                return "image"
+            if file_bytes.startswith(b"BM") or file_bytes.startswith((b"II*\\x00", b"MM\\x00*")):
+                return "image"
+            if len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+                return "image"
             if file_bytes.lstrip().startswith(b"%PDF-"):
                 return "pdf"
             # Determine Office format from the internal package structure.
@@ -47,6 +59,14 @@ class DocumentProcessor:
                 pass
         by_extension = {
             ".txt": "txt",
+            ".png": "image",
+            ".jpg": "image",
+            ".jpeg": "image",
+            ".webp": "image",
+            ".gif": "image",
+            ".bmp": "image",
+            ".tif": "image",
+            ".tiff": "image",
             ".docx": "docx",
             ".xlsx": "xlsx",
             ".pdf": "pdf",
@@ -56,6 +76,12 @@ class DocumentProcessor:
             return by_extension[extension]
         by_mime = {
             "text/plain": "txt",
+            "image/png": "image",
+            "image/jpeg": "image",
+            "image/webp": "image",
+            "image/gif": "image",
+            "image/bmp": "image",
+            "image/tiff": "image",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
             "application/pdf": "pdf",
@@ -66,6 +92,28 @@ class DocumentProcessor:
         raise ValueError(
             "Формат не поддерживается. Используйте TXT, DOCX, XLSX, PPTX или PDF."
         )
+
+    @staticmethod
+    def normalize_image_bytes(file_bytes):
+        """Decode an image with Pillow and return a display-safe PNG.
+
+        This avoids relying on Kivy's platform-specific loaders for WebP,
+        TIFF, animated GIFs, and images with EXIF orientation.
+        """
+        from PIL import Image, ImageOps
+        source = io.BytesIO(file_bytes)
+        with Image.open(source) as image:
+            try:
+                image.seek(0)  # first frame for animated formats
+            except EOFError:
+                pass
+            image = ImageOps.exif_transpose(image)
+            image.load()
+            has_alpha = "A" in image.getbands() or "transparency" in image.info
+            converted = image.convert("RGBA" if has_alpha else "RGB")
+            output = io.BytesIO()
+            converted.save(output, format="PNG", optimize=True)
+            return output.getvalue()
 
     @staticmethod
     def read_txt_bytes(file_bytes):
