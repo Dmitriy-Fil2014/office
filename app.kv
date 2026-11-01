@@ -139,66 +139,32 @@ MDScreen:
 
         MDCard:
             id: splash_layer
-            orientation: "vertical"
             radius: [0, 0, 0, 0]
             elevation: 0
-            spacing: "18dp"
-            padding: "28dp"
             size_hint: 1, 1
             pos: 0, 0
             opacity: 1
-            md_bg_color: 0.985, 0.995, 0.99, 1
-            canvas.before:
-                Color:
-                    rgba: 0.12, 0.72, 0.43, 0.16
-                Ellipse:
-                    size: self.width * 1.15, self.height * 0.42
-                    pos: self.x - self.width * 0.18, self.top - self.height * 0.18
-                Color:
-                    rgba: 0.10, 0.66, 0.38, 0.12
-                Ellipse:
-                    size: self.width * 1.2, self.height * 0.34
-                    pos: self.right - self.width * 0.95, self.y - self.height * 0.12
-            Widget:
-                size_hint_y: 1
-            Image:
-                source: "app_icon.png"
-                size_hint: 1, None
-                height: min(root.height * 0.32, dp(250))
-                allow_stretch: True
-                keep_ratio: True
-            MDLabel:
-                text: "Лист"
-                halign: "center"
-                font_style: "H2"
-                bold: True
-                theme_text_color: "Custom"
-                text_color: 0.02, 0.38, 0.22, 1
-                size_hint_y: None
-                height: "76dp"
-            MDLabel:
-                text: "Работа с файлами"
-                halign: "center"
-                font_style: "H5"
-                theme_text_color: "Custom"
-                text_color: 0.20, 0.25, 0.29, 1
-                size_hint_y: None
-                height: "54dp"
-            Widget:
-                size_hint_y: 0.22
-            MDSpinner:
-                size_hint: None, None
-                size: "54dp", "54dp"
-                pos_hint: {"center_x": 0.5}
-                active: True
-                color: 0.02, 0.65, 0.35, 1
-            MDLabel:
-                text: "Загрузка..."
-                halign: "center"
-                font_style: "H5"
-                theme_text_color: "Custom"
-                text_color: 0.20, 0.25, 0.29, 1
-                size_hint_y: None
-                height: "58dp"
-            Widget:
-                size_hint_y: 1
+            md_bg_color: 1, 1, 1, 1
+            FloatLayout:
+                Image:
+                    source: "splash_leaf.jpg"
+                    size_hint: 1, 1
+                    pos_hint: {"x": 0, "y": 0}
+                    allow_stretch: True
+                    keep_ratio: True
+                MDSpinner:
+                    size_hint: None, None
+                    size: "58dp", "58dp"
+                    pos_hint: {"center_x": 0.5, "center_y": 0.295}
+                    active: True
+                    color: 0.02, 0.65, 0.35, 1
+                MDLabel:
+                    id: splash_loading_label
+                    text: "Загрузка..."
+                    halign: "center"
+                    font_style: "H5"
+                    theme_text_color: "Custom"
+                    text_color: 0.20, 0.25, 0.29, 1
+                    size_hint: 0.8, None
+                    height: "58dp"
+                    pos_hint: {"center_x": 0.5, "center_y": 0.18}
