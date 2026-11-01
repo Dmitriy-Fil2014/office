@@ -113,6 +113,73 @@ class DocumentProcessor:
         return "\n".join(paragraph.text for paragraph in paragraphs)
 
     @staticmethod
+    def extract_docx_images(file_bytes):
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as package:
+            return [package.read(name) for name in sorted(package.namelist())
+                    if name.startswith("word/media/") and not name.endswith("/")]
+
+    @staticmethod
+    def extract_pptx_slides(file_bytes):
+        from pptx import Presentation
+        presentation = Presentation(io.BytesIO(file_bytes))
+        result = []
+        for slide in presentation.slides:
+            texts, images = [], []
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False) and shape.text.strip():
+                    texts.append(shape.text.strip())
+                if getattr(shape, "has_table", False):
+                    for row in shape.table.rows:
+                        texts.append(" | ".join(cell.text for cell in row.cells))
+                if getattr(shape, "shape_type", None) == 13:
+                    try:
+                        images.append(shape.image.blob)
+                    except Exception:
+                        pass
+            result.append({"texts": texts, "images": images})
+        return result
+
+    @staticmethod
+    def _parse_rich_runs(paragraph, value):
+        import re
+        from docx.shared import RGBColor
+        from docx.enum.text import WD_COLOR_INDEX
+        token = re.compile(r"(\\[b\\]|\\[/b\\]|\\[color=#[0-9A-Fa-f]{6}\\]|\\[/color\\]|\\[highlight=#[0-9A-Fa-f]{6}\\]|\\[/highlight\\])")
+        pieces = token.split(value)
+        bold = False
+        color = None
+        highlight = None
+        first = True
+        for piece in pieces:
+            if not piece:
+                continue
+            if piece == "[b]":
+                bold = True
+            elif piece == "[/b]":
+                bold = False
+            elif piece.startswith("[color="):
+                color = piece[7:-1]
+            elif piece == "[/color]":
+                color = None
+            elif piece.startswith("[highlight="):
+                highlight = piece[11:-1]
+            elif piece == "[/highlight]":
+                highlight = None
+            else:
+                run = paragraph.runs[0] if first and paragraph.runs else paragraph.add_run()
+                if first and paragraph.runs:
+                    run.text = piece
+                else:
+                    run.text = piece
+                first = False
+                if bold:
+                    run.bold = True
+                if color:
+                    run.font.color.rgb = RGBColor.from_string(color.lstrip("#"))
+                if highlight:
+                    run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+
+    @staticmethod
     def _replace_paragraph_text_preserving_xml(paragraph, value):
         text_nodes = paragraph._p.xpath(".//w:t")
         if text_nodes:
@@ -134,12 +201,11 @@ class DocumentProcessor:
 
         for index, paragraph in enumerate(paragraphs):
             value = lines[index] if index < len(lines) else ""
-            DocumentProcessor._replace_paragraph_text_preserving_xml(
-                paragraph, value
-            )
+            DocumentProcessor._parse_rich_runs(paragraph, value)
 
         for value in lines[len(paragraphs):]:
-            document.add_paragraph(value)
+            paragraph = document.add_paragraph()
+            DocumentProcessor._parse_rich_runs(paragraph, value)
 
         output = io.BytesIO()
         document.save(output)
