@@ -42,6 +42,18 @@ MDScreen:
                     size_hint_y: None
                     height: "42dp"
 
+            ScrollView:
+                size_hint_y: 1
+                do_scroll_x: False
+                bar_width: "3dp"
+                MDBoxLayout:
+                    id: documents_list
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: "6dp"
+                    padding: "2dp"
+
             MDCard:
                 id: editor_card
                 orientation: "vertical"
@@ -139,27 +151,13 @@ MDScreen:
             Widget:
                 size_hint_y: 1
             MDLabel:
-                text: "Лист"
+                text: "Загрузка"
                 halign: "center"
-                font_style: "H3"
-                bold: True
+                valign: "middle"
+                font_style: "H5"
                 theme_text_color: "Custom"
                 text_color: 1, 1, 1, 1
                 size_hint_y: None
                 height: "64dp"
-            MDSpinner:
-                size_hint: None, None
-                size: "46dp", "46dp"
-                pos_hint: {"center_x": 0.5}
-                active: True
-                color: 1, 1, 1, 1
-            MDLabel:
-                text: "Загрузка"
-                halign: "center"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 0.94
-                font_style: "Subtitle1"
-                size_hint_y: None
-                height: "34dp"
             Widget:
                 size_hint_y: 1
