@@ -288,6 +288,11 @@ class DocumentLocalApp(MDApp):
             self.current_file_bytes = processor.create_document_bytes(file_format)
             self.current_uri = None
             self.root.ids.file_content_view.text = "[Слайд 1]\nВведите текст слайда" if file_format == "pptx" else ""
+            if file_format == "xlsx":
+                self.show_spreadsheet_editor()
+            else:
+                self.root.ids.editor_card.height = self.root.height * 0.60
+                self.root.ids.editor_card.opacity = 1
             self.root.ids.save_btn.disabled = False
             self.root.ids.status_label.text = "Новый файл. Нажмите «Сохранить» и выберите место."
         except Exception as exc:
