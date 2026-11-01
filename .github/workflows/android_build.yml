@@ -105,6 +105,12 @@ jobs:
           reopened = Document(io.BytesIO(edited))
           assert reopened.paragraphs[0].text == "Changed"
           assert reopened.tables[0].cell(0, 0).text == "Cell edited"
+          reopened.sections[0].header.paragraphs[0].text = "Header text"
+          reopened.sections[0].footer.paragraphs[0].text = "Footer text"
+          header_footer_source = io.BytesIO()
+          reopened.save(header_footer_source)
+          extracted_word_text = DocumentProcessor.read_word_bytes(header_footer_source.getvalue())
+          assert "Header text" in extracted_word_text and "Footer text" in extracted_word_text
 
           # XLSX: workbook structure and second sheet survive editing.
           book = Workbook()
@@ -134,7 +140,9 @@ jobs:
           with Image.open(io.BytesIO(normalized)) as decoded:
               assert decoded.format == "PNG" and decoded.size == (16, 16)
           with_image = DocumentProcessor.add_image_to_docx(original.getvalue(), sample_image)
-          assert len(DocumentProcessor.extract_docx_images(with_image)) == 1
+          embedded_images = DocumentProcessor.extract_docx_images(with_image)
+          assert len(embedded_images) == 1
+          assert Image.open(io.BytesIO(DocumentProcessor.normalize_image_bytes(embedded_images[0]))).format == "PNG"
 
           # PPTX: new slide and image are retained in the package.
           from pptx import Presentation
