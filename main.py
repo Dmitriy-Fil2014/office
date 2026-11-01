@@ -206,7 +206,7 @@ class DocumentLocalApp(MDApp):
             ),
         )
         accept_btn = MDFillRoundFlatButton(
-            text="Я СОГЛАСЕН, НАЧАТЬ РАБОТУ",
+            text="СОГЛАСЕН",
             on_release=self.accept_legal_agreements,
         )
         self.consent_dialog = MDDialog(
