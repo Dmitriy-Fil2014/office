@@ -1,0 +1,28 @@
+PRIVACY POLICY
+Leaf application
+Revision: 1 November 2026
+
+1. About the app
+Leaf is a mobile document editor. To work with a file, the user selects it in the Android system file picker. The app does not require registration or an account.
+
+2. Data processed
+When a user opens a document, the app receives access to the selected file through Android Storage Access Framework (SAF), reads its contents and processes them on the device. Access is limited to the document selected by the user, not the entire phone storage.
+
+App preferences (such as theme, language and acceptance of these terms) are stored locally in the app settings. For troubleshooting, the app may write technical diagnostic logs to its private app data folder. Do not include passwords or other secrets in documents or error reports.
+
+3. Data sharing
+The current version does not provide cloud synchronization, user accounts or document uploads to the developer. Selected files are processed locally. Use the Android system file picker and check which file you grant access to.
+
+4. Document storage and saving
+Until saved, edits are kept in the app's working memory. When Save is pressed, the app attempts to write the modified file to the location selected by the user. The actual storage location and future availability depend on Android and the selected document provider. The app is not a backup service.
+
+5. Permissions
+Opening and saving documents uses the Android system file picker. The user selects a document and confirms access. If Android displays a system permission prompt, read it before granting permission.
+
+6. Security and limitations
+The app is not an encrypted storage vault and cannot guarantee protection from other apps or people who have access to the device or selected cloud provider. Protect your device with a screen lock and avoid opening confidential files on devices you do not trust.
+
+7. Policy updates
+This policy may be updated in a new app version if data-processing practices materially change. Please review the current text after updates.
+
+This policy describes the current version of the app and is not legal advice.
