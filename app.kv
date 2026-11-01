@@ -106,8 +106,15 @@ MDScreen:
                     text: "Открыть"
                     icon: "folder-open"
                     on_release: app.open_system_storage()
-                    size_hint_x: 0.33
+                    size_hint_x: 0.25
                     md_bg_color: 0.16, 0.60, 0.68, 1
+
+                MDFillRoundFlatIconButton:
+                    text: "Папка"
+                    icon: "folder-plus"
+                    on_release: app.request_folder_access()
+                    size_hint_x: 0.25
+                    md_bg_color: 0.35, 0.48, 0.70, 1
 
                 MDFillRoundFlatIconButton:
                     id: save_btn
@@ -115,7 +122,7 @@ MDScreen:
                     icon: "content-save"
                     on_release: app.save_changes_to_storage()
                     disabled: True
-                    size_hint_x: 0.34
+                    size_hint_x: 0.25
                     md_bg_color: 0.30, 0.38, 0.52, 1
 
         MDCard:
