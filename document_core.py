@@ -32,7 +32,7 @@ class DocumentProcessor:
         if file_bytes:
             if file_bytes.startswith(b"%PDF-"):
                 return "pdf"
-            if file_bytes.startswith(b"PK\\x03\\x04"):
+            if file_bytes.startswith(b"PK\x03\x04"):
                 if extension == ".xlsx":
                     return "xlsx"
                 if extension == ".pptx":
