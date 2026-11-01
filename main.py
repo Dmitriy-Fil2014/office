@@ -168,7 +168,7 @@ class DocumentLocalApp(MDApp):
                 readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
                 self.show_fullscreen_text_editor(self.root.ids.file_content_view.text)
-            self.root.ids.save_btn.disabled = False
+            self.root.ids.save_btn.disabled = (self.current_file_format == "image")
             self.root.ids.status_label.text = "Открыт документ: " + self.current_file_name
         except Exception as exc:
             self.root.ids.status_label.text = "Ошибка открытия документа: " + str(exc)
