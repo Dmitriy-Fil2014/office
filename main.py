@@ -5,6 +5,8 @@ from kivy.clock import Clock
 from kivy.animation import Animation
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivymd.uix.card import MDCard
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -391,22 +393,21 @@ class DocumentLocalApp(MDApp):
 
     def process_android_uri(self, uri):
         try:
-            current_activity = autoclass(
-                "org.kivy.android.PythonActivity"
-            ).mActivity
+            current_activity = autoclass("org.kivy.android.PythonActivity").mActivity
             resolver = current_activity.getContentResolver()
-            self.current_file_name, mime_type = self._get_file_metadata(
-                uri, resolver
-            )
-            DocumentProcessor = self._get_processor()
-            self.current_file_format = DocumentProcessor.detect_format(
-                self.current_file_name, mime_type
-            )
-
+            self.current_file_name, mime_type = self._get_file_metadata(uri, resolver)
             input_stream = resolver.openInputStream(uri)
             if input_stream is None:
                 raise IOError("Android не смог открыть выбранный файл.")
             self.current_file_bytes = self._read_android_stream(input_stream)
+            DocumentProcessor = self._get_processor()
+            self.current_file_format = DocumentProcessor.detect_format(
+                self.current_file_name, mime_type, self.current_file_bytes
+            )
+            if self.current_file_format == "xlsx":
+                self.show_spreadsheet_editor()
+                self.root.ids.status_label.text = "Открыта таблица: " + self.current_file_name
+                return
 
             readers = {
                 "txt": DocumentProcessor.read_txt_bytes,
@@ -417,6 +418,8 @@ class DocumentLocalApp(MDApp):
             }
             text = readers[self.current_file_format](self.current_file_bytes)
             self.root.ids.file_content_view.text = text
+            self.root.ids.editor_card.height = self.root.height * 0.60
+            self.root.ids.editor_card.opacity = 1
             self.root.ids.save_btn.disabled = False
             self.root.ids.status_label.text = (
                 f"Открыт {self.current_file_name}. "
@@ -427,6 +430,76 @@ class DocumentLocalApp(MDApp):
             self.root.ids.file_content_view.text = ""
             self.root.ids.save_btn.disabled = True
             self.root.ids.status_label.text = f"Ошибка открытия: {exc}"
+
+
+    def show_spreadsheet_editor(self):
+        values = self._get_processor().read_excel_grid(self.current_file_bytes)
+        self.spreadsheet_cells = []
+        modal = ModalView(size_hint=(0.98, 0.92), auto_dismiss=False)
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        outer.add_widget(MDLabel(text="Таблица Excel", size_hint_y=None, height="42dp", bold=True, halign="center"))
+        scroll = ScrollView(do_scroll_x=True, do_scroll_y=True)
+        grid = GridLayout(cols=8, size_hint=(None, None), spacing="2dp",
+                          row_default_height="42dp", row_force_default=True)
+        grid.bind(minimum_width=grid.setter("width"), minimum_height=grid.setter("height"))
+        for row in values[:40]:
+            cells = []
+            for value in row[:8]:
+                field = TextInput(text="" if value is None else str(value), multiline=False,
+                                  size_hint=(None, None), size=("112dp", "42dp"),
+                                  font_size="14sp", background_color=(0.94, 0.97, 1, 1),
+                                  foreground_color=(0.08, 0.14, 0.24, 1))
+                grid.add_widget(field)
+                cells.append(field)
+            while len(cells) < 8:
+                field = TextInput(multiline=False, size_hint=(None, None),
+                                  size=("112dp", "42dp"), font_size="14sp")
+                grid.add_widget(field)
+                cells.append(field)
+            self.spreadsheet_cells.append(cells)
+        scroll.add_widget(grid)
+        outer.add_widget(scroll)
+        actions = MDBoxLayout(size_hint_y=None, height="50dp", spacing="8dp")
+        actions.add_widget(MDFillRoundFlatButton(text="Сохранить", on_release=lambda *_: (modal.dismiss(), self.save_changes_to_storage())))
+        actions.add_widget(MDFillRoundFlatButton(text="Закрыть", on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(actions)
+        modal.add_widget(outer)
+        self.spreadsheet_view = modal
+        modal.open()
+
+    def add_picture_to_document(self):
+        if platform != "android" or self.current_file_format not in ("docx", "pptx"):
+            self.root.ids.status_label.text = "Добавление изображений доступно в Word и PowerPoint."
+            return
+        try:
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("image/*")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            activity.bind(on_activity_result=self.on_image_selected)
+            autoclass("org.kivy.android.PythonActivity").mActivity.startActivityForResult(intent, 1014)
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось выбрать изображение: " + str(exc)
+
+    def on_image_selected(self, request_code, result_code, intent):
+        if request_code != 1014:
+            return
+        activity.unbind(on_activity_result=self.on_image_selected)
+        Activity = autoclass("android.app.Activity")
+        if result_code != Activity.RESULT_OK or intent is None or intent.getData() is None:
+            return
+        try:
+            resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+            data = self._read_android_stream(resolver.openInputStream(intent.getData()))
+            processor = self._get_processor()
+            if self.current_file_format == "pptx":
+                self.current_file_bytes = processor.add_image_to_pptx(self.current_file_bytes, data)
+            else:
+                self.current_file_bytes = processor.add_image_to_docx(self.current_file_bytes, data)
+            self.root.ids.status_label.text = "Изображение добавлено. Нажмите «Сохранить»."
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось вставить изображение: " + str(exc)
 
     def _build_updated_document(self):
         processor = self._get_processor()
@@ -441,6 +514,23 @@ class DocumentLocalApp(MDApp):
         return writers[self.current_file_format]()
 
     def save_changes_to_storage(self):
+        if getattr(self, "current_file_format", "") == "xlsx" and getattr(self, "spreadsheet_cells", None):
+            try:
+                values = [[cell.text for cell in row] for row in self.spreadsheet_cells]
+                self.current_file_bytes = self._get_processor().modify_excel_grid(self.current_file_bytes, values)
+                if not self.current_uri:
+                    self.pending_create_bytes = self.current_file_bytes
+                    self._start_create_document()
+                else:
+                    resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+                    stream = resolver.openOutputStream(self.current_uri, "wt")
+                    stream.write(self.current_file_bytes)
+                    stream.flush()
+                    stream.close()
+                self.root.ids.status_label.text = "Таблица сохранена."
+            except Exception as exc:
+                self.root.ids.status_label.text = "Ошибка сохранения таблицы: " + str(exc)
+            return
         if platform != "android":
             self.root.ids.status_label.text = "Сохранение доступно в Android-приложении."
             return
