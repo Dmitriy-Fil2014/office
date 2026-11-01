@@ -327,7 +327,30 @@ class DocumentProcessor:
 
     @staticmethod
     def modify_pptx_bytes(old_bytes, new_text):
-        # Never rewrite a presentation from a flattened text dump: doing so
-        # destroys text on later slides and can erase content the user typed.
-        # Until the slide canvas editor is used, preserve the original package.
-        return old_bytes
+        from pptx import Presentation
+        presentation = Presentation(io.BytesIO(old_bytes))
+        current_slide = -1
+        slide_text = {}
+        for line in new_text.splitlines():
+            marker = line.strip()
+            if marker.startswith("[Слайд ") and marker.endswith("]"):
+                try:
+                    current_slide = int(marker[7:-1]) - 1
+                    slide_text.setdefault(current_slide, [])
+                except ValueError:
+                    current_slide = -1
+            elif current_slide >= 0 and line.strip():
+                slide_text[current_slide].append(line)
+        # Edit only the first text box on each slide. All other shapes,
+        # pictures, tables, backgrounds and later slide content stay intact.
+        for index, slide in enumerate(presentation.slides):
+            values = slide_text.get(index, [])
+            if not values:
+                continue
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False):
+                    shape.text_frame.text = values[0]
+                    break
+        output = io.BytesIO()
+        presentation.save(output)
+        return output.getvalue()
