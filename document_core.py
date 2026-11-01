@@ -1,14 +1,6 @@
 import io
 import os
 
-from docx import Document
-from docx.oxml.ns import qn
-from docx.table import Table
-from docx.text.paragraph import Paragraph
-from openpyxl import load_workbook
-from pypdf import PdfReader, PdfWriter
-from pptx import Presentation
-
 
 class DocumentProcessor:
     @staticmethod
@@ -17,11 +9,13 @@ class DocumentProcessor:
         if file_format == "txt":
             return b""
         if file_format == "docx":
+            from docx import Document
             Document().save(output)
         elif file_format == "xlsx":
             from openpyxl import Workbook
             Workbook().save(output)
         elif file_format == "pptx":
+            from pptx import Presentation
             presentation = Presentation()
             slide = presentation.slides.add_slide(presentation.slide_layouts[6])
             box = slide.shapes.add_textbox(914400, 914400, 7315200, 1828800)
@@ -66,6 +60,9 @@ class DocumentProcessor:
 
     @staticmethod
     def _iter_word_paragraphs(parent, seen_cells=None):
+        from docx.oxml.ns import qn
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
         if seen_cells is None:
             seen_cells = set()
         if hasattr(parent, "element") and hasattr(parent.element, "body"):
@@ -91,6 +88,7 @@ class DocumentProcessor:
 
     @staticmethod
     def read_word_bytes(file_bytes):
+        from docx import Document
         document = Document(io.BytesIO(file_bytes))
         paragraphs = list(DocumentProcessor._iter_word_paragraphs(document))
         return "\n".join(paragraph.text for paragraph in paragraphs)
@@ -107,6 +105,7 @@ class DocumentProcessor:
 
     @staticmethod
     def modify_word_bytes(old_bytes, new_text):
+        from docx import Document
         # Keep the original document package. Replace only text nodes, so
         # paragraph properties, tables, pictures, headers, and other XML parts
         # remain in the DOCX instead of rebuilding a blank document.
@@ -129,6 +128,7 @@ class DocumentProcessor:
 
     @staticmethod
     def read_excel_bytes(file_bytes):
+        from openpyxl import load_workbook
         workbook = load_workbook(io.BytesIO(file_bytes), data_only=False)
         try:
             sheet = workbook.active
@@ -157,6 +157,7 @@ class DocumentProcessor:
 
     @staticmethod
     def modify_excel_bytes(old_bytes, new_text):
+        from openpyxl import load_workbook
         # Update only the active sheet's values; keep workbook sheets,
         # formatting, widths, merged cells, and other workbook structures.
         workbook = load_workbook(io.BytesIO(old_bytes), data_only=False)
@@ -181,11 +182,13 @@ class DocumentProcessor:
 
     @staticmethod
     def read_pdf_bytes(file_bytes):
+        from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(file_bytes))
         return "\n".join(page.extract_text() or "" for page in reader.pages)
 
     @staticmethod
     def modify_pdf_bytes(old_bytes, new_text):
+        from pypdf import PdfReader, PdfWriter
         # pypdf cannot rewrite arbitrary page text in-place. Preserve every
         # page and store the edited text in PDF Description metadata.
         reader = PdfReader(io.BytesIO(old_bytes))
@@ -201,6 +204,7 @@ class DocumentProcessor:
 
     @staticmethod
     def read_pptx_bytes(file_bytes):
+        from pptx import Presentation
         presentation = Presentation(io.BytesIO(file_bytes))
         lines = []
         for number, slide in enumerate(presentation.slides, start=1):
@@ -215,6 +219,7 @@ class DocumentProcessor:
 
     @staticmethod
     def modify_pptx_bytes(old_bytes, new_text):
+        from pptx import Presentation
         presentation = Presentation(io.BytesIO(old_bytes))
         paragraphs = []
         for slide in presentation.slides:
