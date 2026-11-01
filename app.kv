@@ -13,7 +13,7 @@ MDScreen:
                 elevation: 0
                 md_bg_color: 0.95, 0.97, 1, 1
                 specific_text_color: (0.10, 0.18, 0.30, 1) if app.theme_cls.theme_style == 'Light' else (0.95, 0.97, 1, 1)
-                right_action_items: [["image-plus", lambda x: app.add_picture_to_document()], ["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
+                right_action_items: [["image-plus", lambda x: app.add_picture_to_document()], ["plus-box", lambda x: app.add_slide_to_presentation()], ["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
 
             MDCard:
                 orientation: "vertical"
