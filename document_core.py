@@ -146,10 +146,12 @@ class DocumentProcessor:
         from docx.enum.text import WD_COLOR_INDEX
         token = re.compile(r"(\\[b\\]|\\[/b\\]|\\[color=#[0-9A-Fa-f]{6}\\]|\\[/color\\]|\\[highlight=#[0-9A-Fa-f]{6}\\]|\\[/highlight\\])")
         pieces = token.split(value)
+        # Clear text nodes but keep drawing elements (embedded pictures).
+        for node in paragraph._p.xpath(".//w:t"):
+            node.text = ""
         bold = False
         color = None
         highlight = None
-        first = True
         for piece in pieces:
             if not piece:
                 continue
@@ -166,12 +168,7 @@ class DocumentProcessor:
             elif piece == "[/highlight]":
                 highlight = None
             else:
-                run = paragraph.runs[0] if first and paragraph.runs else paragraph.add_run()
-                if first and paragraph.runs:
-                    run.text = piece
-                else:
-                    run.text = piece
-                first = False
+                run = paragraph.add_run(piece)
                 if bold:
                     run.bold = True
                 if color:
