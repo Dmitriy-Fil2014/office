@@ -491,6 +491,17 @@ class DocumentLocalApp(MDApp):
         self.spreadsheet_view = modal
         modal.open()
 
+    def add_slide_to_presentation(self):
+        if self.current_file_format != "pptx":
+            self.root.ids.status_label.text = "Добавление слайдов доступно в PowerPoint."
+            return
+        try:
+            self.current_file_bytes = self._get_processor().add_slide_to_pptx(self.current_file_bytes)
+            self.root.ids.file_content_view.text = self._get_processor().read_pptx_bytes(self.current_file_bytes)
+            self.root.ids.status_label.text = "Добавлен новый слайд. Нажмите «Сохранить»."
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось добавить слайд: " + str(exc)
+
     def add_picture_to_document(self):
         if platform != "android" or self.current_file_format not in ("docx", "pptx"):
             self.root.ids.status_label.text = "Добавление изображений доступно в Word и PowerPoint."
