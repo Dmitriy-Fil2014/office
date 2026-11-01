@@ -844,6 +844,7 @@ class DocumentLocalApp(MDApp):
             self.current_file_bytes = self._get_processor().add_slide_to_pptx(self.current_file_bytes)
             self.root.ids.file_content_view.text = self._get_processor().read_pptx_bytes(self.current_file_bytes)
             self.root.ids.status_label.text = "Добавлен новый слайд. Нажмите «Сохранить»."
+            Clock.schedule_once(lambda _dt: self.show_presentation_editor(), 0.15)
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось добавить слайд: " + str(exc)
 
@@ -1020,7 +1021,7 @@ class DocumentLocalApp(MDApp):
         listing = MDBoxLayout(orientation="vertical", size_hint_y=None, spacing="12dp")
         listing.bind(minimum_height=listing.setter("height"))
         for slide_number, slide in enumerate(slides, start=1):
-            card = MDCard(orientation="vertical", size_hint_y=None, height="260dp",
+            card = MDCard(orientation="vertical", size_hint_y=None, height="420dp",
                           padding="12dp", spacing="8dp", radius=[12,12,12,12],
                           md_bg_color=(1,1,1,1))
             card.add_widget(MDLabel(text="Слайд " + str(slide_number),
@@ -1035,7 +1036,7 @@ class DocumentLocalApp(MDApp):
             card.add_widget(label)
             for image_bytes in slide.get("images", [])[:3]:
                 try:
-                    texture = CoreImage(io.BytesIO(image_bytes), ext="png").texture
+                    texture = CoreImage(io.BytesIO(image_bytes)).texture
                     card.add_widget(KivyImage(texture=texture, size_hint=(1,None),
                         height="100dp", allow_stretch=True, keep_ratio=True))
                 except Exception:
