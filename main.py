@@ -158,19 +158,27 @@ class DocumentLocalApp(MDApp):
 
     def show_settings_menu(self):
         en = getattr(self, "language", "ru") == "en"
-        self.dialog = MDDialog(
-            title="Settings" if en else "Настройки",
-            text="Choose theme and language" if en else "Выберите тему и язык приложения.",
-            buttons=[
-                MDFlatButton(text="SYSTEM THEME" if en else "СИСТЕМНАЯ ТЕМА", on_release=lambda x: self.set_theme_mode("system")),
-                MDFlatButton(text="DARK" if en else "ТЁМНАЯ", on_release=lambda x: self.set_theme_mode("dark")),
-                MDFlatButton(text="LIGHT" if en else "СВЕТЛАЯ", on_release=lambda x: self.set_theme_mode("light")),
-                MDFlatButton(text="РУССКИЙ", on_release=lambda x: self.set_language("ru")),
-                MDFlatButton(text="ENGLISH", on_release=lambda x: self.set_language("en")),
-
-            ],
-        )
-        self.dialog.open()
+        modal = ModalView(size_hint=(0.88, 0.72), auto_dismiss=True,
+                          background_color=(0.02, 0.05, 0.12, 0.62))
+        card = MDCard(orientation="vertical", padding="18dp", spacing="8dp",
+                      radius=[24, 24, 24, 24], elevation=8,
+                      md_bg_color=(0.97, 0.98, 1, 1) if self.theme_cls.theme_style == "Light" else (0.10, 0.13, 0.20, 1))
+        card.add_widget(MDLabel(text="Настройки" if not en else "Settings",
+                                font_style="H6", bold=True, size_hint_y=None, height="42dp"))
+        card.add_widget(MDLabel(text="Тема оформления" if not en else "Appearance",
+                                size_hint_y=None, height="26dp", theme_text_color="Secondary"))
+        for label, mode in ([("Системная", "system"), ("Светлая", "light"), ("Тёмная", "dark")] if not en else [("System", "system"), ("Light", "light"), ("Dark", "dark")]):
+            card.add_widget(MDFillRoundFlatButton(text=label, size_hint_x=1,
+                on_release=lambda *_, value=mode: (modal.dismiss(), self.set_theme_mode(value))))
+        card.add_widget(MDLabel(text="Язык" if not en else "Language",
+                                size_hint_y=None, height="26dp", theme_text_color="Secondary"))
+        card.add_widget(MDFillRoundFlatButton(text="Русский", size_hint_x=1,
+            on_release=lambda *_: (modal.dismiss(), self.set_language("ru"))))
+        card.add_widget(MDFillRoundFlatButton(text="English", size_hint_x=1,
+            on_release=lambda *_: (modal.dismiss(), self.set_language("en"))))
+        modal.add_widget(card)
+        self.settings_view = modal
+        modal.open()
 
     def _write_startup_error(self, title):
         try:
