@@ -173,6 +173,18 @@ class DocumentProcessor:
             workbook.close()
 
     @staticmethod
+    def add_slide_to_pptx(old_bytes):
+        from pptx import Presentation
+        from pptx.util import Inches
+        presentation = Presentation(io.BytesIO(old_bytes))
+        slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+        shape = slide.shapes.add_textbox(Inches(0.7), Inches(0.6), Inches(8.0), Inches(1.2))
+        shape.text_frame.text = "Новый слайд"
+        output = io.BytesIO()
+        presentation.save(output)
+        return output.getvalue()
+
+    @staticmethod
     def add_image_to_pptx(old_bytes, image_bytes):
         from pptx import Presentation
         presentation = Presentation(io.BytesIO(old_bytes))
