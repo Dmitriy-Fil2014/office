@@ -92,6 +92,7 @@ jobs:
           from docx import Document
           from openpyxl import Workbook, load_workbook
           from document_core import DocumentProcessor
+          from PIL import Image
 
           # DOCX: text edit must keep a table and embedded image relationship
           doc = Document()
@@ -131,7 +132,6 @@ jobs:
 
           # PPTX: new slide and image are retained in the package.
           from pptx import Presentation
-          from PIL import Image
           pptx_source = DocumentProcessor.create_document_bytes("pptx")
           pptx_source = DocumentProcessor.add_slide_to_pptx(pptx_source)
           image_stream = io.BytesIO()
