@@ -60,6 +60,22 @@ class DocumentLocalApp(MDApp):
             self._write_startup_error("Ошибка применения настроек при запуске")
         Clock.schedule_once(self._finish_startup, 0.65)
         Clock.schedule_once(self._hide_splash, 0.75)
+        Clock.schedule_once(self._open_shared_file, 1.0)
+
+    def _open_shared_file(self, _dt):
+        if platform != "android":
+            return
+        try:
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            incoming = current.getIntent()
+            Intent = autoclass("android.content.Intent")
+            if incoming.getAction() in (Intent.ACTION_VIEW, Intent.ACTION_EDIT):
+                uri = incoming.getData()
+                if uri is not None:
+                    self.current_uri = uri
+                    self.process_android_uri(uri)
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось принять файл из другого приложения: " + str(exc)
 
     def _hide_splash(self, _dt):
         try:
