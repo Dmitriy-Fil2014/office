@@ -18,6 +18,9 @@ import os
 import io
 from kivy.core.image import Image as CoreImage
 from kivy.uix.image import Image as KivyImage
+import io
+from kivy.core.image import Image as CoreImage
+from kivy.uix.image import Image as KivyImage
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton, MDFillRoundFlatButton
 
@@ -63,7 +66,8 @@ class DocumentLocalApp(MDApp):
             self._write_startup_error("Ошибка применения настроек при запуске")
         # Request Android storage access as soon as the first screen is ready.
         Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._hide_splash, 0.75)
+        Clock.schedule_once(self._animate_splash_loading, 0.1)
+        Clock.schedule_once(self._hide_splash, 2.0)
         Clock.schedule_once(self.request_all_files_access, 0.85)
         Clock.schedule_once(self._open_shared_file, 1.0)
         Clock.schedule_once(lambda _dt: self.refresh_document_list(), 1.2)
@@ -155,6 +159,7 @@ class DocumentLocalApp(MDApp):
             elif self.current_file_format == "docx":
                 self.show_word_editor()
             elif self.current_file_format == "pptx":
+                self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
                 self.show_presentation_editor()
             else:
                 readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes}
@@ -180,8 +185,21 @@ class DocumentLocalApp(MDApp):
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось принять файл из другого приложения: " + str(exc)
 
+    def _animate_splash_loading(self, _dt):
+        try:
+            label = self.root.ids.splash_loading_label
+            pulse = Animation(opacity=0.35, duration=0.65, t="in_out_sine") + Animation(opacity=1, duration=0.65, t="in_out_sine")
+            pulse.repeat = True
+            self.splash_pulse = pulse
+            pulse.start(label)
+        except Exception:
+            pass
+
     def _hide_splash(self, _dt):
         try:
+            pulse = getattr(self, "splash_pulse", None)
+            if pulse:
+                pulse.cancel(self.root.ids.splash_loading_label)
             layer = self.root.ids.splash_layer
             animation = Animation(opacity=0, duration=0.28, t="out_quad")
             def remove_splash(*_):
@@ -405,6 +423,8 @@ class DocumentLocalApp(MDApp):
                 "txt": "Новый файл.txt",
             }[file_format]
             self.current_file_bytes = processor.create_document_bytes(file_format)
+            if file_format == "pptx":
+                self.root.ids.file_content_view.text = processor.read_pptx_bytes(self.current_file_bytes)
             self.current_uri = None
             self.current_local_path = None
             self.root.ids.file_content_view.text = "[Слайд 1]\nВведите текст слайда" if file_format == "pptx" else ""
@@ -658,6 +678,7 @@ class DocumentLocalApp(MDApp):
                 self.root.ids.status_label.text = "Открыт документ Word: " + self.current_file_name
                 return
             if self.current_file_format == "pptx":
+                self.root.ids.file_content_view.text = DocumentProcessor.read_pptx_bytes(self.current_file_bytes)
                 self.show_presentation_editor()
                 self.root.ids.status_label.text = "Открыта презентация: " + self.current_file_name
                 return
@@ -681,7 +702,7 @@ class DocumentLocalApp(MDApp):
     def show_spreadsheet_editor(self):
         values = self._get_processor().read_excel_grid(self.current_file_bytes)
         self.spreadsheet_cells = []
-        modal = ModalView(size_hint=(0.98, 0.92), auto_dismiss=False)
+        modal = ModalView(size_hint=(1, 1), auto_dismiss=False)
         outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
         outer.add_widget(MDLabel(text="Таблица Excel", size_hint_y=None, height="42dp", bold=True, halign="center"))
         scroll = ScrollView(do_scroll_x=True, do_scroll_y=True)
@@ -951,7 +972,7 @@ class DocumentLocalApp(MDApp):
         try:
             for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):
                 try:
-                    texture = CoreImage(io.BytesIO(image_bytes), ext="png").texture
+                    texture = CoreImage(io.BytesIO(image_bytes)).texture
                     preview = KivyImage(texture=texture, size_hint=(1,None),
                                         height=min(self.root.width * 0.72, 360),
                                         allow_stretch=True, keep_ratio=True)
