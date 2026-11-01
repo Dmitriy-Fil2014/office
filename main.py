@@ -497,6 +497,13 @@ class DocumentLocalApp(MDApp):
         self.dialog.open()
 
     def show_legal_doc(self, filename, title_text):
+        if getattr(self, "language", "ru") == "en":
+            filename = {"privacy_policy.txt": "privacy_policy_en.txt",
+                        "terms_of_use.txt": "terms_of_use_en.txt"}.get(filename, filename)
+            title_text = {"Политика": "Privacy Policy",
+                          "Условия": "Terms of Use",
+                          "Политика конфиденциальности": "Privacy Policy",
+                          "Условия использования": "Terms of Use"}.get(title_text, title_text)
         if self.dialog:
             self.dialog.dismiss()
         if getattr(self, "legal_view", None):
