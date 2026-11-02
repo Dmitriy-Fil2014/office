@@ -947,16 +947,17 @@ class DocumentLocalApp(MDApp):
         png_bytes = processor.normalize_image_bytes(self.current_file_bytes)
         texture = CoreImage(io.BytesIO(png_bytes), ext="png").texture
         modal = self._make_editor_modal()
-        #
-                          background_color=(0.015, 0.02, 0.03, 1),
-                          overlay_color=(0, 0, 0, 0))
+        modal.background_color = (0.015, 0.02, 0.03, 1)
+        modal.overlay_color = (0, 0, 0, 0)
         outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
         header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Изображение",
                                   bold=True, theme_text_color="Custom",
                                   text_color=(1, 1, 1, 1), valign="middle"))
+        self._add_editor_mode_button(header, modal)
         header.add_widget(MDFillRoundFlatButton(
-            text="Закрыть", on_release=lambda *_: modal.dismiss()))
+            text="Закрыть", md_bg_color=(0.78, 0.12, 0.16, 1),
+            text_color=(1, 1, 1, 1), on_release=lambda *_: modal.dismiss()))
         outer.add_widget(header)
         viewer = KivyImage(texture=texture, size_hint=(1, 1),
                            allow_stretch=True, keep_ratio=True)
@@ -966,8 +967,7 @@ class DocumentLocalApp(MDApp):
         modal.open()
 
     def show_fullscreen_text_editor(self, text):
-        modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
-                          background_color=(0.02, 0.04, 0.08, 0.88))
+        modal = self._make_editor_modal()
         outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
         header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Редактор",
@@ -975,7 +975,9 @@ class DocumentLocalApp(MDApp):
         header.add_widget(MDFillRoundFlatButton(text="Сохранить",
             on_release=lambda *_: (setattr(self.root.ids.file_content_view, "text", editor.text),
                                    modal.dismiss(), self.save_changes_to_storage())))
+        self._add_editor_mode_button(header, modal)
         header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
             on_release=lambda *_: modal.dismiss()))
         editor = TextInput(text=text, multiline=True, font_size="18sp",
                            size_hint=(1, 1), background_color=(0.98,0.98,0.98,1),
@@ -990,8 +992,7 @@ class DocumentLocalApp(MDApp):
     def show_word_editor(self):
         processor = self._get_processor()
         text = processor.read_word_bytes(self.current_file_bytes)
-        modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
-                          background_color=(0.02, 0.04, 0.08, 0.92))
+        modal = self._make_editor_modal()
         outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
         header = MDBoxLayout(size_hint_y=None, height="46dp", spacing="5dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Word",
@@ -1002,7 +1003,9 @@ class DocumentLocalApp(MDApp):
             on_release=lambda *_: self.add_table_to_word()))
         header.add_widget(MDFillRoundFlatButton(text="Сохранить",
             on_release=lambda *_: self._save_word_editor(modal)))
+        self._add_editor_mode_button(header, modal)
         header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
             on_release=lambda *_: modal.dismiss()))
         toolbar = MDBoxLayout(size_hint_y=None, height="46dp", spacing="4dp")
         toolbar.add_widget(MDFillRoundFlatButton(text="Ж", on_release=lambda *_: self.apply_word_bold()))
@@ -1067,7 +1070,9 @@ class DocumentLocalApp(MDApp):
             on_release=lambda *_: self.add_picture_to_document()))
         header.add_widget(MDFillRoundFlatButton(text="Сохранить",
             on_release=lambda *_: (modal.dismiss(), self.save_changes_to_storage())))
+        self._add_editor_mode_button(header, modal)
         header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
             on_release=lambda *_: modal.dismiss()))
         outer.add_widget(header)
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
