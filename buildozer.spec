@@ -7,7 +7,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,txt
 icon.filename = app_icon.png
 presplash.filename = splash_leaf.jpg
-android.presplash_color = #102D55
+android.presplash_color = #00180C
 # Show the supplied static Leaf artwork immediately during native Android startup.
 orientation = portrait
 p4a.branch = v2024.01.21
