@@ -691,9 +691,15 @@ class DocumentLocalApp(MDApp):
     def show_spreadsheet_editor(self):
         values = self._get_processor().read_excel_grid(self.current_file_bytes)
         self.spreadsheet_cells = []
-        modal = ModalView(size_hint=(1, 1), auto_dismiss=False)
+        modal = self._make_editor_modal()
         outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
-        outer.add_widget(MDLabel(text="Таблица Excel", size_hint_y=None, height="42dp", bold=True, halign="center"))
+        header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
+        header.add_widget(MDLabel(text="Таблица Excel", bold=True, valign="middle"))
+        self._add_editor_mode_button(header, modal)
+        header.add_widget(MDFillRoundFlatButton(
+            text="Закрыть", md_bg_color=(0.78, 0.12, 0.16, 1),
+            text_color=(1, 1, 1, 1), on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
         scroll = ScrollView(do_scroll_x=True, do_scroll_y=True)
         grid = GridLayout(cols=max(8, max((len(row) for row in values), default=8)), size_hint=(None, None), spacing="2dp",
                           row_default_height="42dp", row_force_default=True)
