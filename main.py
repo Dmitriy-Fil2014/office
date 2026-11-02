@@ -880,7 +880,7 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Не удалось вставить изображение: " + str(exc)
 
     def editor_view_mode(self):
-        return self.config.get("General", "editor_view_mode", "desktop")
+        return self.config.get("General", "editor_view_mode", fallback="desktop")
 
     def _editor_modal_size(self):
         return (0.94, 0.92) if self.editor_view_mode() == "desktop" else (1, 1)
