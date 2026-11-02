@@ -41,7 +41,7 @@ class DocumentLocalApp(MDApp):
     def build(self):
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.accent_palette = "LightBlue"
-        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "ru"})
+        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "ru", "editor_view_mode": "desktop"})
         try:
             return Builder.load_file("app.kv")
         except Exception as exc:
@@ -66,7 +66,6 @@ class DocumentLocalApp(MDApp):
             self._write_startup_error("Ошибка применения настроек при запуске")
         # Request Android storage access as soon as the first screen is ready.
         Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._animate_splash_loading, 0.1)
         Clock.schedule_once(self._hide_splash, 2.0)
         Clock.schedule_once(self.request_all_files_access, 0.85)
         Clock.schedule_once(self._open_shared_file, 1.0)
@@ -188,21 +187,8 @@ class DocumentLocalApp(MDApp):
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось принять файл из другого приложения: " + str(exc)
 
-    def _animate_splash_loading(self, _dt):
-        try:
-            label = self.root.ids.splash_loading_label
-            pulse = Animation(opacity=0.35, duration=0.65, t="in_out_sine") + Animation(opacity=1, duration=0.65, t="in_out_sine")
-            pulse.repeat = True
-            self.splash_pulse = pulse
-            pulse.start(label)
-        except Exception:
-            pass
-
     def _hide_splash(self, _dt):
         try:
-            pulse = getattr(self, "splash_pulse", None)
-            if pulse:
-                pulse.cancel(self.root.ids.splash_loading_label)
             layer = self.root.ids.splash_layer
             animation = Animation(opacity=0, duration=0.28, t="out_quad")
             def remove_splash(*_):
@@ -898,6 +884,39 @@ class DocumentLocalApp(MDApp):
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось вставить изображение: " + str(exc)
 
+    def editor_view_mode(self):
+        return self.config.get("General", "editor_view_mode", "desktop")
+
+    def _editor_modal_size(self):
+        return (0.98, 0.96) if self.editor_view_mode() == "desktop" else (1, 1)
+
+    def _make_editor_modal(self):
+        return ModalView(size_hint=self._editor_modal_size(), auto_dismiss=False,
+                         background_color=(0.02, 0.04, 0.08, 0.94),
+                         overlay_color=(0, 0, 0, 0.55))
+
+    def _add_editor_mode_button(self, header, modal):
+        button = MDFillRoundFlatButton(
+            text="Мобильный вид" if self.editor_view_mode() == "desktop" else "Десктопный вид",
+            on_release=lambda *_: self.toggle_editor_view_mode(modal))
+        header.add_widget(button)
+        self.editor_mode_button = button
+        return button
+
+    def toggle_editor_view_mode(self, modal=None):
+        updated = "mobile" if self.editor_view_mode() == "desktop" else "desktop"
+        self.config.set("General", "editor_view_mode", updated)
+        self.config.write()
+        if modal is not None:
+            modal.size_hint = self._editor_modal_size()
+        button = getattr(self, "editor_mode_button", None)
+        if button is not None:
+            button.text = "Мобильный вид" if updated == "desktop" else "Десктопный вид"
+        try:
+            self.root.ids.status_label.text = "Включён " + ("десктопный" if updated == "desktop" else "мобильный") + " вид редактора."
+        except Exception:
+            pass
+
     def _editor_selection_wrap(self, opening, closing):
         editor = getattr(self, "word_editor_input", None)
         if editor is None:
@@ -927,7 +946,8 @@ class DocumentLocalApp(MDApp):
         processor = self._get_processor()
         png_bytes = processor.normalize_image_bytes(self.current_file_bytes)
         texture = CoreImage(io.BytesIO(png_bytes), ext="png").texture
-        modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
+        modal = self._make_editor_modal()
+        #
                           background_color=(0.015, 0.02, 0.03, 1),
                           overlay_color=(0, 0, 0, 0))
         outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
