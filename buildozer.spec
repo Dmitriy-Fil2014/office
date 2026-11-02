@@ -6,9 +6,9 @@ version = 1.0.2
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,txt
 icon.filename = app_icon.png
-presplash.filename =
+presplash.filename = splash_leaf.jpg
 android.presplash_color = #102D55
-# Keep the native presplash image empty; the app shows its own animated loading screen.
+# Show the supplied static Leaf artwork immediately during native Android startup.
 orientation = portrait
 p4a.branch = v2024.01.21
 # sqlite3 is included with Python; python-for-android supplies hostpython3.
