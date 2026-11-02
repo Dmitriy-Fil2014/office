@@ -115,7 +115,7 @@ class DocumentLocalApp(MDApp):
                                                  size_hint_y=None, height="48dp"))
                     return
             root_path = str(autoclass("android.os.Environment").getExternalStorageDirectory().getAbsolutePath())
-            allowed = (".docx", ".xlsx", ".pptx", ".pdf", ".txt", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff")
+            allowed = (".docx", ".xlsx", ".pptx", ".pdf", ".txt")
             found = []
             for base, dirs, files in os.walk(root_path):
                 dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails")]
@@ -486,7 +486,6 @@ class DocumentLocalApp(MDApp):
                 "application/pdf",
                 "text/plain",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                "image/*",
             ]
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mime_types)
             activity.bind(on_activity_result=self.on_file_selected)
