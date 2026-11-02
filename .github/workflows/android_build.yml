@@ -87,6 +87,8 @@ jobs:
       - name: Test document processing
         run: |
           python -m py_compile main.py document_core.py
+          grep -Fq 'self.config.get("General", "editor_view_mode", fallback="desktop")' main.py
+          ! grep -Fq 'self.config.get("General", "editor_view_mode", "desktop")' main.py
           python - <<'PY'
           import io
           from docx import Document
