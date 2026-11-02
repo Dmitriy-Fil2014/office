@@ -2,7 +2,6 @@ from kivy.utils import platform
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.clock import Clock
-from kivy.animation import Animation
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.gridlayout import GridLayout
@@ -190,13 +189,9 @@ class DocumentLocalApp(MDApp):
     def _hide_splash(self, _dt):
         try:
             layer = self.root.ids.splash_layer
-            animation = Animation(opacity=0, duration=0.28, t="out_quad")
-            def remove_splash(*_):
-                parent = layer.parent
-                if parent is not None:
-                    parent.remove_widget(layer)
-            animation.bind(on_complete=remove_splash)
-            animation.start(layer)
+            parent = layer.parent
+            if parent is not None:
+                parent.remove_widget(layer)
         except Exception:
             pass
 
@@ -888,7 +883,7 @@ class DocumentLocalApp(MDApp):
         return self.config.get("General", "editor_view_mode", "desktop")
 
     def _editor_modal_size(self):
-        return (0.98, 0.96) if self.editor_view_mode() == "desktop" else (1, 1)
+        return (0.94, 0.92) if self.editor_view_mode() == "desktop" else (1, 1)
 
     def _make_editor_modal(self):
         return ModalView(size_hint=self._editor_modal_size(), auto_dismiss=False,
