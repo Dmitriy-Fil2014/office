@@ -178,8 +178,14 @@ class DocumentLocalApp(MDApp):
             current = autoclass("org.kivy.android.PythonActivity").mActivity
             incoming = current.getIntent()
             Intent = autoclass("android.content.Intent")
-            if incoming.getAction() in (Intent.ACTION_VIEW, Intent.ACTION_EDIT):
-                uri = incoming.getData()
+            action = incoming.getAction()
+            uri = incoming.getData()
+            if action == Intent.ACTION_SEND:
+                try:
+                    uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM)
+                except Exception:
+                    uri = None
+            if action in (Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND):
                 if uri is not None:
                     self.current_uri = uri
                     self.process_android_uri(uri)
@@ -998,34 +1004,23 @@ class DocumentLocalApp(MDApp):
         header = MDBoxLayout(size_hint_y=None, height="46dp", spacing="5dp")
         header.add_widget(MDLabel(text=self.current_file_name or "Word",
                                   bold=True, valign="middle"))
-        header.add_widget(MDFillRoundFlatButton(text="Изображение",
-            on_release=lambda *_: self.add_picture_to_document()))
-        header.add_widget(MDFillRoundFlatButton(text="Таблица",
-            on_release=lambda *_: self.add_table_to_word()))
         header.add_widget(MDFillRoundFlatButton(text="Сохранить",
             on_release=lambda *_: self._save_word_editor(modal)))
-        self._add_editor_mode_button(header, modal)
         header.add_widget(MDFillRoundFlatButton(text="Закрыть",
             md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
             on_release=lambda *_: modal.dismiss()))
-        toolbar = MDBoxLayout(size_hint_y=None, height="46dp", spacing="4dp")
-        toolbar.add_widget(MDFillRoundFlatButton(text="Ж", on_release=lambda *_: self.apply_word_bold()))
-        for caption, color in (("Чёрный","#111111"),("Красный","#D32F2F"),
-                               ("Синий","#1565C0"),("Зелёный","#16834A")):
-            toolbar.add_widget(MDFillRoundFlatButton(text=caption,
-                on_release=lambda _btn, value=color: self.apply_word_color(value)))
-        toolbar.add_widget(MDFillRoundFlatButton(text="Маркер",
-            on_release=lambda *_: self.apply_word_highlight()))
         self.word_editor_input = TextInput(text=text, multiline=True, font_size="18sp",
-            size_hint=(1, 1), background_color=(0.99,0.99,0.99,1),
-            foreground_color=(0.08,0.10,0.13,1), padding="12dp")
+            size_hint=(1, None), height=max(600, self.root.height * 0.65),
+            background_color=(0.99,0.99,0.99,1),
+            foreground_color=(0.08,0.10,0.13,1), padding="12dp",
+            cursor_color=(0.05,0.45,0.22,1), selection_color=(0.12,0.55,0.30,0.35))
+        self.word_editor_input.bind(text=self._resize_word_editor,
+                                    width=self._resize_word_editor)
         outer.add_widget(header)
-        outer.add_widget(toolbar)
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
         content = MDBoxLayout(orientation="vertical", size_hint_y=None, spacing="10dp")
         content.bind(minimum_height=content.setter("height"))
-        self.word_editor_input.size_hint_y = None
-        self.word_editor_input.height = max(600, self.root.height * 0.62)
+        self._resize_word_editor(self.word_editor_input, self.word_editor_input.text)
         content.add_widget(self.word_editor_input)
         try:
             for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):
@@ -1045,6 +1040,25 @@ class DocumentLocalApp(MDApp):
         modal.add_widget(outer)
         self.word_editor_modal = modal
         modal.open()
+
+    def _resize_word_editor(self, instance, _value):
+        """Grow the editable Word text area so the outer ScrollView can scroll the document."""
+        try:
+            import textwrap
+            width_px = max(1, instance.width)
+            font_px = max(1, instance.font_size)
+            chars_per_line = max(12, int(width_px / (font_px * 0.55)))
+            visual_lines = 0
+            for line in instance.text.splitlines() or [""]:
+                visual_lines += max(1, len(textwrap.wrap(
+                    line, width=chars_per_line, break_long_words=True,
+                    replace_whitespace=False, drop_whitespace=False)))
+            instance.height = max(
+                self.root.height * 0.65,
+                visual_lines * instance.line_height + 32
+            )
+        except Exception:
+            instance.height = max(600, self.root.height * 0.65)
 
     def _save_word_editor(self, modal):
         try:
