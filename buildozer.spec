@@ -17,6 +17,7 @@ requirements = python3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,pyth
 # The app requests Android's special all-files access for its on-device document list.
 android.manifest.intent_filters = ./intent_filters.xml
 # MANAGE_EXTERNAL_STORAGE requires the user to approve access in Android Settings.
+android.release_artifact = apk
 android.api = 34
 android.minapi = 21
 android.permissions = MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
