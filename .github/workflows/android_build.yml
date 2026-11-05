@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/leaf-loading-and-editor-ui
 
 permissions:
   contents: read
@@ -86,11 +87,14 @@ jobs:
       - name: Test document processing
         run: |
           python -m py_compile main.py document_core.py
+          grep -Fq 'self.config.get("General", "editor_view_mode", fallback="desktop")' main.py
+          ! grep -Fq 'self.config.get("General", "editor_view_mode", "desktop")' main.py
           python - <<'PY'
           import io
           from docx import Document
           from openpyxl import Workbook, load_workbook
           from document_core import DocumentProcessor
+          from PIL import Image
 
           # DOCX: text edit must keep a table and embedded image relationship
           doc = Document()
@@ -103,6 +107,12 @@ jobs:
           reopened = Document(io.BytesIO(edited))
           assert reopened.paragraphs[0].text == "Changed"
           assert reopened.tables[0].cell(0, 0).text == "Cell edited"
+          reopened.sections[0].header.paragraphs[0].text = "Header text"
+          reopened.sections[0].footer.paragraphs[0].text = "Footer text"
+          header_footer_source = io.BytesIO()
+          reopened.save(header_footer_source)
+          extracted_word_text = DocumentProcessor.read_word_bytes(header_footer_source.getvalue())
+          assert "Header text" in extracted_word_text and "Footer text" in extracted_word_text
 
           # XLSX: workbook structure and second sheet survive editing.
           book = Workbook()
@@ -122,9 +132,22 @@ jobs:
           grid_result = DocumentProcessor.modify_excel_grid(grid_source, grid)
           assert load_workbook(io.BytesIO(grid_result)).active["A1"].value == "Grid cell"
 
+          # DOCX embedded image extraction must work for the preview.
+          image_stream = io.BytesIO()
+          Image.new("RGB", (16, 16), "blue").save(image_stream, format="PNG")
+          sample_image = image_stream.getvalue()
+          assert DocumentProcessor.detect_format("photo.png", file_bytes=sample_image) == "image"
+          assert DocumentProcessor.detect_format("photo.jpg", file_bytes=sample_image) == "image"
+          normalized = DocumentProcessor.normalize_image_bytes(sample_image)
+          with Image.open(io.BytesIO(normalized)) as decoded:
+              assert decoded.format == "PNG" and decoded.size == (16, 16)
+          with_image = DocumentProcessor.add_image_to_docx(original.getvalue(), sample_image)
+          embedded_images = DocumentProcessor.extract_docx_images(with_image)
+          assert len(embedded_images) == 1
+          assert Image.open(io.BytesIO(DocumentProcessor.normalize_image_bytes(embedded_images[0]))).format == "PNG"
+
           # PPTX: new slide and image are retained in the package.
           from pptx import Presentation
-          from PIL import Image
           pptx_source = DocumentProcessor.create_document_bytes("pptx")
           pptx_source = DocumentProcessor.add_slide_to_pptx(pptx_source)
           image_stream = io.BytesIO()
@@ -133,6 +156,9 @@ jobs:
           presentation = Presentation(io.BytesIO(pptx_result))
           assert len(presentation.slides) == 2
           assert any(shape.shape_type == 13 for shape in presentation.slides[-1].shapes)
+          slide_data = DocumentProcessor.extract_pptx_slides(pptx_result)
+          assert len(slide_data) == 2
+          assert slide_data[-1]["images"]
 
           print("Document processing tests passed.")
           PY
@@ -156,33 +182,59 @@ jobs:
           test -f document_core.py
           grep -n '^requirements' buildozer.spec
 
-      - name: Build APK
+      - name: Prepare release signing
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          P4A_RELEASE_KEYSTORE_PASSWD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          P4A_RELEASE_KEYALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in RELEASE_KEYSTORE_BASE64 P4A_RELEASE_KEYSTORE_PASSWD P4A_RELEASE_KEYALIAS P4A_RELEASE_KEYALIAS_PASSWD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub Actions secret for release signing: $name (configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD)."
+              exit 1
+            fi
+          done
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/list-release.keystore"
+          keytool -list -keystore "$RUNNER_TEMP/list-release.keystore" -storepass "$P4A_RELEASE_KEYSTORE_PASSWD" -alias "$P4A_RELEASE_KEYALIAS" >/dev/null
+          echo "P4A_RELEASE_KEYSTORE=$RUNNER_TEMP/list-release.keystore" >> "$GITHUB_ENV"
+          echo "P4A_RELEASE_KEYSTORE_PASSWD=$P4A_RELEASE_KEYSTORE_PASSWD" >> "$GITHUB_ENV"
+          echo "P4A_RELEASE_KEYALIAS=$P4A_RELEASE_KEYALIAS" >> "$GITHUB_ENV"
+          echo "P4A_RELEASE_KEYALIAS_PASSWD=$P4A_RELEASE_KEYALIAS_PASSWD" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
         shell: bash
         run: |
           mkdir -p build-report
           set -o pipefail
-          buildozer -v android debug 2>&1 | tee build-report/build.log
+          buildozer -v android release 2>&1 | tee build-report/build.log
 
-      - name: Check APK
+      - name: Verify release APK signature
         if: success()
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
-          find . -type f -name "*.apk" \
-            -not -path "./.buildozer/*" \
-            -not -path "./.git/*" \
-            -exec cp {} dist/ \;
-          test -n "$(find dist -maxdepth 1 -type f -name '*.apk' -print -quit)"
-          ls -lh dist/
+          mapfile -t apks < <(find bin -maxdepth 1 -type f -name '*-release.apk' -print)
+          test "${#apks[@]}" -eq 1
+          APK="${apks[0]}"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
+          "$APKSIGNER" verify --print-certs "$APK"
+          cp "$APK" dist/List-release.apk
+          ls -lh dist/List-release.apk
 
-      - name: Upload APK
-        if: always()
+      - name: Upload release APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: List-APK
-          path: dist/*.apk
+          name: List-Release-APK
+          path: dist/List-release.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
       - name: Upload build log
         if: always()

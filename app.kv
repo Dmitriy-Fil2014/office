@@ -11,9 +11,9 @@ MDScreen:
                 id: app_title
                 title: "Лист"
                 elevation: 0
-                md_bg_color: 0.95, 0.97, 1, 1
+                md_bg_color: (0.95, 0.97, 1, 1) if app.theme_cls.theme_style == 'Light' else (0.055, 0.075, 0.12, 1)
                 specific_text_color: (0.10, 0.18, 0.30, 1) if app.theme_cls.theme_style == 'Light' else (0.95, 0.97, 1, 1)
-                right_action_items: [["image-plus", lambda x: app.add_picture_to_document()], ["table-plus", lambda x: app.add_table_to_word()], ["plus-box", lambda x: app.add_slide_to_presentation()], ["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
+                right_action_items: [["image-plus", lambda x: app.add_picture_to_document()], ["table-plus", lambda x: app.add_table_to_word()], ["plus-box", lambda x: app.add_slide_to_presentation()], ["monitor", lambda x: app.toggle_editor_view_mode()], ["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
 
             MDCard:
                 orientation: "vertical"
@@ -139,25 +139,16 @@ MDScreen:
 
         MDCard:
             id: splash_layer
-            orientation: "vertical"
             radius: [0, 0, 0, 0]
             elevation: 0
-            spacing: "18dp"
-            padding: "32dp"
             size_hint: 1, 1
             pos: 0, 0
             opacity: 1
-            md_bg_color: 0.08, 0.32, 0.66, 1
-            Widget:
-                size_hint_y: 1
-            MDLabel:
-                text: "Загрузка"
-                halign: "center"
-                valign: "middle"
-                font_style: "H5"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 1
-                size_hint_y: None
-                height: "64dp"
-            Widget:
-                size_hint_y: 1
+            md_bg_color: 1, 1, 1, 1
+            FloatLayout:
+                Image:
+                    source: "splash_leaf.jpg"
+                    size_hint: 1, 1
+                    pos_hint: {"x": 0, "y": 0}
+                    allow_stretch: True
+                    keep_ratio: False

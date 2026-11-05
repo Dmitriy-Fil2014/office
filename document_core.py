@@ -30,6 +30,18 @@ class DocumentProcessor:
     def detect_format(file_name, mime_type="", file_bytes=None):
         extension = os.path.splitext(str(file_name).lower())[1]
         if file_bytes:
+            # Identify common image formats by their file signatures as well as
+            # their extension. Android document providers often omit MIME types.
+            if file_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+                return "image"
+            if file_bytes.startswith(b"\\xff\\xd8\\xff"):
+                return "image"
+            if file_bytes.startswith((b"GIF87a", b"GIF89a")):
+                return "image"
+            if file_bytes.startswith(b"BM") or file_bytes.startswith((b"II*\\x00", b"MM\\x00*")):
+                return "image"
+            if len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+                return "image"
             if file_bytes.lstrip().startswith(b"%PDF-"):
                 return "pdf"
             # Determine Office format from the internal package structure.
@@ -47,6 +59,14 @@ class DocumentProcessor:
                 pass
         by_extension = {
             ".txt": "txt",
+            ".png": "image",
+            ".jpg": "image",
+            ".jpeg": "image",
+            ".webp": "image",
+            ".gif": "image",
+            ".bmp": "image",
+            ".tif": "image",
+            ".tiff": "image",
             ".docx": "docx",
             ".xlsx": "xlsx",
             ".pdf": "pdf",
@@ -56,6 +76,12 @@ class DocumentProcessor:
             return by_extension[extension]
         by_mime = {
             "text/plain": "txt",
+            "image/png": "image",
+            "image/jpeg": "image",
+            "image/webp": "image",
+            "image/gif": "image",
+            "image/bmp": "image",
+            "image/tiff": "image",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
             "application/pdf": "pdf",
@@ -66,6 +92,28 @@ class DocumentProcessor:
         raise ValueError(
             "Формат не поддерживается. Используйте TXT, DOCX, XLSX, PPTX или PDF."
         )
+
+    @staticmethod
+    def normalize_image_bytes(file_bytes):
+        """Decode an image with Pillow and return a display-safe PNG.
+
+        This avoids relying on Kivy's platform-specific loaders for WebP,
+        TIFF, animated GIFs, and images with EXIF orientation.
+        """
+        from PIL import Image, ImageOps
+        source = io.BytesIO(file_bytes)
+        with Image.open(source) as image:
+            try:
+                image.seek(0)  # first frame for animated formats
+            except EOFError:
+                pass
+            image = ImageOps.exif_transpose(image)
+            image.load()
+            has_alpha = "A" in image.getbands() or "transparency" in image.info
+            converted = image.convert("RGBA" if has_alpha else "RGB")
+            output = io.BytesIO()
+            converted.save(output, format="PNG", optimize=True)
+            return output.getvalue()
 
     @staticmethod
     def read_txt_bytes(file_bytes):
@@ -86,6 +134,8 @@ class DocumentProcessor:
             container = parent.element.body
         elif hasattr(parent, "_tc"):
             container = parent._tc
+        elif hasattr(parent, "_element"):
+            container = parent._element
         else:
             container = parent
         for child in container.iterchildren():
@@ -109,8 +159,89 @@ class DocumentProcessor:
         if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
             raise ValueError('Выбранный файл не является корректным DOCX. Возможно, это старый формат DOC или файл повреждён.')
         document = Document(io.BytesIO(file_bytes))
-        paragraphs = list(DocumentProcessor._iter_word_paragraphs(document))
+        # Include the main story, tables, and section headers/footers so
+        # commonly used Word content is not silently omitted in the editor.
+        containers = [document]
+        for section in document.sections:
+            containers.extend([
+                section.header, section.footer,
+                section.first_page_header, section.first_page_footer,
+                section.even_page_header, section.even_page_footer,
+            ])
+        paragraphs = []
+        seen = set()
+        for container in containers:
+            for paragraph in DocumentProcessor._iter_word_paragraphs(container):
+                marker = paragraph._p
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                paragraphs.append(paragraph)
         return "\n".join(paragraph.text for paragraph in paragraphs)
+
+    @staticmethod
+    def extract_docx_images(file_bytes):
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as package:
+            return [package.read(name) for name in sorted(package.namelist())
+                    if name.startswith("word/media/") and not name.endswith("/")]
+
+    @staticmethod
+    def extract_pptx_slides(file_bytes):
+        from pptx import Presentation
+        presentation = Presentation(io.BytesIO(file_bytes))
+        result = []
+        for slide in presentation.slides:
+            texts, images = [], []
+            for shape in slide.shapes:
+                if getattr(shape, "has_text_frame", False) and shape.text.strip():
+                    texts.append(shape.text.strip())
+                if getattr(shape, "has_table", False):
+                    for row in shape.table.rows:
+                        texts.append(" | ".join(cell.text for cell in row.cells))
+                if getattr(shape, "shape_type", None) == 13:
+                    try:
+                        images.append(shape.image.blob)
+                    except Exception:
+                        pass
+            result.append({"texts": texts, "images": images})
+        return result
+
+    @staticmethod
+    def _parse_rich_runs(paragraph, value):
+        import re
+        from docx.shared import RGBColor
+        from docx.enum.text import WD_COLOR_INDEX
+        token = re.compile(r"(\[b\]|\[/b\]|\[color=#[0-9A-Fa-f]{6}\]|\[/color\]|\[highlight=#[0-9A-Fa-f]{6}\]|\[/highlight\])")
+        pieces = token.split(value)
+        # Clear text nodes but keep drawing elements (embedded pictures).
+        for node in paragraph._p.xpath(".//w:t"):
+            node.text = ""
+        bold = False
+        color = None
+        highlight = None
+        for piece in pieces:
+            if not piece:
+                continue
+            if piece == "[b]":
+                bold = True
+            elif piece == "[/b]":
+                bold = False
+            elif piece.startswith("[color="):
+                color = piece[7:-1]
+            elif piece == "[/color]":
+                color = None
+            elif piece.startswith("[highlight="):
+                highlight = piece[11:-1]
+            elif piece == "[/highlight]":
+                highlight = None
+            else:
+                run = paragraph.add_run(piece)
+                if bold:
+                    run.bold = True
+                if color:
+                    run.font.color.rgb = RGBColor.from_string(color.lstrip("#"))
+                if highlight:
+                    run.font.highlight_color = WD_COLOR_INDEX.YELLOW
 
     @staticmethod
     def _replace_paragraph_text_preserving_xml(paragraph, value):
@@ -134,12 +265,11 @@ class DocumentProcessor:
 
         for index, paragraph in enumerate(paragraphs):
             value = lines[index] if index < len(lines) else ""
-            DocumentProcessor._replace_paragraph_text_preserving_xml(
-                paragraph, value
-            )
+            DocumentProcessor._parse_rich_runs(paragraph, value)
 
         for value in lines[len(paragraphs):]:
-            document.add_paragraph(value)
+            paragraph = document.add_paragraph()
+            DocumentProcessor._parse_rich_runs(paragraph, value)
 
         output = io.BytesIO()
         document.save(output)

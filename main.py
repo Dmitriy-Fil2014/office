@@ -2,7 +2,6 @@ from kivy.utils import platform
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.clock import Clock
-from kivy.animation import Animation
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.gridlayout import GridLayout
@@ -15,6 +14,12 @@ import traceback
 import locale
 import sys
 import os
+import io
+from kivy.core.image import Image as CoreImage
+from kivy.uix.image import Image as KivyImage
+import io
+from kivy.core.image import Image as CoreImage
+from kivy.uix.image import Image as KivyImage
 from kivymd.uix.dialog import MDDialog
 from kivymd.uix.button import MDFlatButton, MDFillRoundFlatButton
 
@@ -35,7 +40,7 @@ class DocumentLocalApp(MDApp):
     def build(self):
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.accent_palette = "LightBlue"
-        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "ru"})
+        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "ru", "editor_view_mode": "desktop"})
         try:
             return Builder.load_file("app.kv")
         except Exception as exc:
@@ -60,7 +65,7 @@ class DocumentLocalApp(MDApp):
             self._write_startup_error("Ошибка применения настроек при запуске")
         # Request Android storage access as soon as the first screen is ready.
         Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._hide_splash, 0.75)
+        Clock.schedule_once(self._hide_splash, 2.0)
         Clock.schedule_once(self.request_all_files_access, 0.85)
         Clock.schedule_once(self._open_shared_file, 1.0)
         Clock.schedule_once(lambda _dt: self.refresh_document_list(), 1.2)
@@ -149,13 +154,19 @@ class DocumentLocalApp(MDApp):
             self.current_file_format = processor.detect_format(self.current_file_name, "", data)
             if self.current_file_format == "xlsx":
                 self.show_spreadsheet_editor()
+            elif self.current_file_format == "docx":
+                self.show_word_editor()
+            elif self.current_file_format == "pptx":
+                self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
+                self.show_presentation_editor()
+            elif self.current_file_format == "image":
+                self.show_image_viewer()
+                self.root.ids.save_btn.disabled = True
             else:
-                readers = {"txt": processor.read_txt_bytes, "docx": processor.read_word_bytes,
-                           "pdf": processor.read_pdf_bytes, "pptx": processor.read_pptx_bytes}
+                readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
-                self.root.ids.editor_card.height = self.root.height * 0.60
-                self.root.ids.editor_card.opacity = 1
-            self.root.ids.save_btn.disabled = False
+                self.show_fullscreen_text_editor(self.root.ids.file_content_view.text)
+            self.root.ids.save_btn.disabled = (self.current_file_format == "image")
             self.root.ids.status_label.text = "Открыт документ: " + self.current_file_name
         except Exception as exc:
             self.root.ids.status_label.text = "Ошибка открытия документа: " + str(exc)
@@ -167,8 +178,14 @@ class DocumentLocalApp(MDApp):
             current = autoclass("org.kivy.android.PythonActivity").mActivity
             incoming = current.getIntent()
             Intent = autoclass("android.content.Intent")
-            if incoming.getAction() in (Intent.ACTION_VIEW, Intent.ACTION_EDIT):
-                uri = incoming.getData()
+            action = incoming.getAction()
+            uri = incoming.getData()
+            if action == Intent.ACTION_SEND:
+                try:
+                    uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM)
+                except Exception:
+                    uri = None
+            if action in (Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND):
                 if uri is not None:
                     self.current_uri = uri
                     self.process_android_uri(uri)
@@ -178,13 +195,9 @@ class DocumentLocalApp(MDApp):
     def _hide_splash(self, _dt):
         try:
             layer = self.root.ids.splash_layer
-            animation = Animation(opacity=0, duration=0.28, t="out_quad")
-            def remove_splash(*_):
-                parent = layer.parent
-                if parent is not None:
-                    parent.remove_widget(layer)
-            animation.bind(on_complete=remove_splash)
-            animation.start(layer)
+            parent = layer.parent
+            if parent is not None:
+                parent.remove_widget(layer)
         except Exception:
             pass
 
@@ -343,10 +356,18 @@ class DocumentLocalApp(MDApp):
         intro.bind(texture_size=lambda w, v: setattr(w, "height", v[1] + 12))
         scroll.add_widget(intro)
         card.add_widget(scroll)
+        card.add_widget(MDFillRoundFlatButton(
+            text="Прочитать политику конфиденциальности" if not en else "Read privacy policy",
+            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+                "privacy_policy.txt", "Политика конфиденциальности" if not en else "Privacy Policy")))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Прочитать условия использования" if not en else "Read terms of use",
+            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+                "terms_of_use.txt", "Условия использования" if not en else "Terms of Use")))
         card.add_widget(MDLabel(
-            text=("Политику конфиденциальности и условия использования можно открыть в настройках."
-                  if not en else "You can review the privacy policy and terms in Settings."),
-            theme_text_color="Secondary", size_hint_y=None, height="52dp"))
+            text=("Ознакомьтесь с обоими документами перед согласием."
+                  if not en else "Please review both documents before accepting."),
+            theme_text_color="Secondary", size_hint_y=None, height="36dp"))
         card.add_widget(MDFillRoundFlatButton(text="I AGREE" if en else "СОГЛАСЕН",
             size_hint_x=1, on_release=self.accept_legal_agreements))
         modal.add_widget(card)
@@ -392,14 +413,19 @@ class DocumentLocalApp(MDApp):
                 "txt": "Новый файл.txt",
             }[file_format]
             self.current_file_bytes = processor.create_document_bytes(file_format)
+            if file_format == "pptx":
+                self.root.ids.file_content_view.text = processor.read_pptx_bytes(self.current_file_bytes)
             self.current_uri = None
             self.current_local_path = None
             self.root.ids.file_content_view.text = "[Слайд 1]\nВведите текст слайда" if file_format == "pptx" else ""
             if file_format == "xlsx":
                 self.show_spreadsheet_editor()
+            elif file_format == "docx":
+                self.show_word_editor()
+            elif file_format == "pptx":
+                self.show_presentation_editor()
             else:
-                self.root.ids.editor_card.height = self.root.height * 0.60
-                self.root.ids.editor_card.opacity = 1
+                self.show_fullscreen_text_editor("")
             self.root.ids.save_btn.disabled = False
             self.root.ids.status_label.text = "Новый файл. Нажмите «Сохранить» и выберите место."
         except Exception as exc:
@@ -637,19 +663,26 @@ class DocumentLocalApp(MDApp):
                 self.show_spreadsheet_editor()
                 self.root.ids.status_label.text = "Открыта таблица: " + self.current_file_name
                 return
+            if self.current_file_format == "docx":
+                self.show_word_editor()
+                self.root.ids.status_label.text = "Открыт документ Word: " + self.current_file_name
+                return
+            if self.current_file_format == "pptx":
+                self.root.ids.file_content_view.text = DocumentProcessor.read_pptx_bytes(self.current_file_bytes)
+                self.show_presentation_editor()
+                self.root.ids.status_label.text = "Открыта презентация: " + self.current_file_name
+                return
+            if self.current_file_format == "image":
+                self.show_image_viewer()
+                self.root.ids.save_btn.disabled = True
+                self.root.ids.status_label.text = "Открыто изображение: " + self.current_file_name
+                return
 
-            readers = {
-                "txt": DocumentProcessor.read_txt_bytes,
-                "docx": DocumentProcessor.read_word_bytes,
-                "xlsx": DocumentProcessor.read_excel_bytes,
-                "pdf": DocumentProcessor.read_pdf_bytes,
-                "pptx": DocumentProcessor.read_pptx_bytes,
-            }
+            readers = {"txt": DocumentProcessor.read_txt_bytes, "pdf": DocumentProcessor.read_pdf_bytes}
             text = readers[self.current_file_format](self.current_file_bytes)
             self.root.ids.file_content_view.text = text
-            self.root.ids.editor_card.height = self.root.height * 0.60
-            self.root.ids.editor_card.opacity = 1
             self.root.ids.save_btn.disabled = False
+            self.show_fullscreen_text_editor(text)
             self.root.ids.status_label.text = (
                 f"Открыт {self.current_file_name}. "
                 "Редактирование выполняется локально."
@@ -664,9 +697,15 @@ class DocumentLocalApp(MDApp):
     def show_spreadsheet_editor(self):
         values = self._get_processor().read_excel_grid(self.current_file_bytes)
         self.spreadsheet_cells = []
-        modal = ModalView(size_hint=(0.98, 0.92), auto_dismiss=False)
+        modal = self._make_editor_modal()
         outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
-        outer.add_widget(MDLabel(text="Таблица Excel", size_hint_y=None, height="42dp", bold=True, halign="center"))
+        header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
+        header.add_widget(MDLabel(text="Таблица Excel", bold=True, valign="middle"))
+        self._add_editor_mode_button(header, modal)
+        header.add_widget(MDFillRoundFlatButton(
+            text="Закрыть", md_bg_color=(0.78, 0.12, 0.16, 1),
+            text_color=(1, 1, 1, 1), on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
         scroll = ScrollView(do_scroll_x=True, do_scroll_y=True)
         grid = GridLayout(cols=max(8, max((len(row) for row in values), default=8)), size_hint=(None, None), spacing="2dp",
                           row_default_height="42dp", row_force_default=True)
@@ -806,6 +845,7 @@ class DocumentLocalApp(MDApp):
             self.current_file_bytes = self._get_processor().add_slide_to_pptx(self.current_file_bytes)
             self.root.ids.file_content_view.text = self._get_processor().read_pptx_bytes(self.current_file_bytes)
             self.root.ids.status_label.text = "Добавлен новый слайд. Нажмите «Сохранить»."
+            Clock.schedule_once(lambda _dt: self.show_presentation_editor(), 0.15)
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось добавить слайд: " + str(exc)
 
@@ -845,12 +885,248 @@ class DocumentLocalApp(MDApp):
             else:
                 self.current_file_bytes = processor.add_image_to_docx(self.current_file_bytes, data)
             self.root.ids.status_label.text = "Изображение добавлено. Нажмите «Сохранить»."
+            if self.current_file_format == "pptx" and getattr(self, "presentation_editor", None):
+                self.presentation_editor.dismiss()
+                Clock.schedule_once(lambda _dt: self.show_presentation_editor(), 0.15)
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось вставить изображение: " + str(exc)
 
+    def editor_view_mode(self):
+        return self.config.get("General", "editor_view_mode", fallback="desktop")
+
+    def _editor_modal_size(self):
+        return (0.94, 0.92) if self.editor_view_mode() == "desktop" else (1, 1)
+
+    def _make_editor_modal(self):
+        return ModalView(size_hint=self._editor_modal_size(), auto_dismiss=False,
+                         background_color=(0.02, 0.04, 0.08, 0.94),
+                         overlay_color=(0, 0, 0, 0.55))
+
+    def _add_editor_mode_button(self, header, modal):
+        button = MDFillRoundFlatButton(
+            text="Мобильный вид" if self.editor_view_mode() == "desktop" else "Десктопный вид",
+            on_release=lambda *_: self.toggle_editor_view_mode(modal))
+        header.add_widget(button)
+        self.editor_mode_button = button
+        return button
+
+    def toggle_editor_view_mode(self, modal=None):
+        updated = "mobile" if self.editor_view_mode() == "desktop" else "desktop"
+        self.config.set("General", "editor_view_mode", updated)
+        self.config.write()
+        if modal is not None:
+            modal.size_hint = self._editor_modal_size()
+        button = getattr(self, "editor_mode_button", None)
+        if button is not None:
+            button.text = "Мобильный вид" if updated == "desktop" else "Десктопный вид"
+        try:
+            self.root.ids.status_label.text = "Включён " + ("десктопный" if updated == "desktop" else "мобильный") + " вид редактора."
+        except Exception:
+            pass
+
+    def _editor_selection_wrap(self, opening, closing):
+        editor = getattr(self, "word_editor_input", None)
+        if editor is None:
+            return
+        start = getattr(editor, "selection_from", None)
+        end = getattr(editor, "selection_to", None)
+        if start is None or end is None or start == end:
+            self.root.ids.status_label.text = "Сначала выделите текст, затем примените формат."
+            return
+        left, right = sorted((start, end))
+        value = editor.text
+        editor.text = value[:left] + opening + value[left:right] + closing + value[right:]
+        editor.cursor = editor.get_cursor_from_index(left + len(opening) + (right-left) + len(closing))
+        editor.cancel_selection()
+
+    def apply_word_bold(self):
+        self._editor_selection_wrap("[b]", "[/b]")
+
+    def apply_word_color(self, color):
+        self._editor_selection_wrap("[color=" + color + "]", "[/color]")
+
+    def apply_word_highlight(self):
+        self._editor_selection_wrap("[highlight=#FFF176]", "[/highlight]")
+
+    def show_image_viewer(self):
+        """Open raster images in a black, edge-to-edge viewer."""
+        processor = self._get_processor()
+        png_bytes = processor.normalize_image_bytes(self.current_file_bytes)
+        texture = CoreImage(io.BytesIO(png_bytes), ext="png").texture
+        modal = self._make_editor_modal()
+        modal.background_color = (0.015, 0.02, 0.03, 1)
+        modal.overlay_color = (0, 0, 0, 0)
+        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
+        header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "Изображение",
+                                  bold=True, theme_text_color="Custom",
+                                  text_color=(1, 1, 1, 1), valign="middle"))
+        self._add_editor_mode_button(header, modal)
+        header.add_widget(MDFillRoundFlatButton(
+            text="Закрыть", md_bg_color=(0.78, 0.12, 0.16, 1),
+            text_color=(1, 1, 1, 1), on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        viewer = KivyImage(texture=texture, size_hint=(1, 1),
+                           allow_stretch=True, keep_ratio=True)
+        outer.add_widget(viewer)
+        modal.add_widget(outer)
+        self.image_viewer_modal = modal
+        modal.open()
+
+    def show_fullscreen_text_editor(self, text):
+        modal = self._make_editor_modal()
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="6dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "Редактор",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(text="Сохранить",
+            on_release=lambda *_: (setattr(self.root.ids.file_content_view, "text", editor.text),
+                                   modal.dismiss(), self.save_changes_to_storage())))
+        self._add_editor_mode_button(header, modal)
+        header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: modal.dismiss()))
+        editor = TextInput(text=text, multiline=True, font_size="18sp",
+                           size_hint=(1, 1), background_color=(0.98,0.98,0.98,1),
+                           foreground_color=(0.08,0.10,0.13,1), padding="12dp")
+        outer.add_widget(header)
+        outer.add_widget(editor)
+        modal.add_widget(outer)
+        self.fullscreen_editor = modal
+        self.fullscreen_text_input = editor
+        modal.open()
+
+    def show_word_editor(self):
+        processor = self._get_processor()
+        text = processor.read_word_bytes(self.current_file_bytes)
+        modal = self._make_editor_modal()
+        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
+        header = MDBoxLayout(size_hint_y=None, height="46dp", spacing="5dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "Word",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(text="Сохранить",
+            on_release=lambda *_: self._save_word_editor(modal)))
+        header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: modal.dismiss()))
+        self.word_editor_input = TextInput(text=text, multiline=True, font_size="18sp",
+            size_hint=(1, None), height=max(600, self.root.height * 0.65),
+            background_color=(0.99,0.99,0.99,1),
+            foreground_color=(0.08,0.10,0.13,1), padding="12dp",
+            cursor_color=(0.05,0.45,0.22,1), selection_color=(0.12,0.55,0.30,0.35))
+        self.word_editor_input.bind(text=self._resize_word_editor,
+                                    width=self._resize_word_editor)
+        outer.add_widget(header)
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        content = MDBoxLayout(orientation="vertical", size_hint_y=None, spacing="10dp")
+        content.bind(minimum_height=content.setter("height"))
+        self._resize_word_editor(self.word_editor_input, self.word_editor_input.text)
+        content.add_widget(self.word_editor_input)
+        try:
+            for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):
+                try:
+                    safe_image = processor.normalize_image_bytes(image_bytes)
+                    texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
+                    preview = KivyImage(texture=texture, size_hint=(1,None),
+                                        height=min(self.root.width * 0.72, 360),
+                                        allow_stretch=True, keep_ratio=True)
+                    content.add_widget(preview)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        scroll.add_widget(content)
+        outer.add_widget(scroll)
+        modal.add_widget(outer)
+        self.word_editor_modal = modal
+        modal.open()
+
+    def _resize_word_editor(self, instance, _value):
+        """Grow the editable Word text area so the outer ScrollView can scroll the document."""
+        try:
+            import textwrap
+            width_px = max(1, instance.width)
+            font_px = max(1, instance.font_size)
+            chars_per_line = max(12, int(width_px / (font_px * 0.55)))
+            visual_lines = 0
+            for line in instance.text.splitlines() or [""]:
+                visual_lines += max(1, len(textwrap.wrap(
+                    line, width=chars_per_line, break_long_words=True,
+                    replace_whitespace=False, drop_whitespace=False)))
+            instance.height = max(
+                self.root.height * 0.65,
+                visual_lines * instance.line_height + 32
+            )
+        except Exception:
+            instance.height = max(600, self.root.height * 0.65)
+
+    def _save_word_editor(self, modal):
+        try:
+            self.current_file_bytes = self._get_processor().modify_word_bytes(
+                self.current_file_bytes, self.word_editor_input.text)
+            modal.dismiss()
+            self.root.ids.status_label.text = "Форматирование Word сохранено. Нажмите «Сохранить» для записи файла."
+            self.save_changes_to_storage()
+        except Exception as exc:
+            self.root.ids.status_label.text = "Ошибка сохранения Word: " + str(exc)
+
+    def show_presentation_editor(self):
+        processor = self._get_processor()
+        slides = processor.extract_pptx_slides(self.current_file_bytes)
+        modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
+                          background_color=(0.02, 0.04, 0.08, 0.92))
+        outer = MDBoxLayout(orientation="vertical", padding="8dp", spacing="6dp")
+        header = MDBoxLayout(size_hint_y=None, height="48dp", spacing="5dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "PowerPoint",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(text="+ Слайд",
+            on_release=lambda *_: (modal.dismiss(), self.add_slide_to_presentation())))
+        header.add_widget(MDFillRoundFlatButton(text="Изображение",
+            on_release=lambda *_: self.add_picture_to_document()))
+        header.add_widget(MDFillRoundFlatButton(text="Сохранить",
+            on_release=lambda *_: (modal.dismiss(), self.save_changes_to_storage())))
+        self._add_editor_mode_button(header, modal)
+        header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        listing = MDBoxLayout(orientation="vertical", size_hint_y=None, spacing="12dp")
+        listing.bind(minimum_height=listing.setter("height"))
+        for slide_number, slide in enumerate(slides, start=1):
+            card = MDCard(orientation="vertical", size_hint_y=None, height="420dp",
+                          padding="12dp", spacing="8dp", radius=[12,12,12,12],
+                          md_bg_color=(1,1,1,1))
+            card.add_widget(MDLabel(text="Слайд " + str(slide_number),
+                                    bold=True, theme_text_color="Custom",
+                                    text_color=(0.1,0.2,0.3,1),
+                                    size_hint_y=None, height="30dp"))
+            slide_text = "\n".join(slide.get("texts", [])) or "(Пустой слайд)"
+            label = MDLabel(text=slide_text, theme_text_color="Custom",
+                            text_color=(0.08,0.1,0.14,1), halign="left",
+                            valign="top", size_hint_y=None, height="100dp")
+            label.bind(width=lambda w,v: setattr(w,"text_size",(v,None)))
+            card.add_widget(label)
+            for image_bytes in slide.get("images", [])[:3]:
+                try:
+                    safe_image = processor.normalize_image_bytes(image_bytes)
+                    texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
+                    card.add_widget(KivyImage(texture=texture, size_hint=(1,None),
+                        height="100dp", allow_stretch=True, keep_ratio=True))
+                except Exception:
+                    continue
+            listing.add_widget(card)
+        scroll.add_widget(listing)
+        outer.add_widget(scroll)
+        modal.add_widget(outer)
+        self.presentation_editor = modal
+        modal.open()
+
     def _build_updated_document(self):
         processor = self._get_processor()
-        new_text = self.root.ids.file_content_view.text
+        new_text = (self.word_editor_input.text if self.current_file_format == "docx" and getattr(self, "word_editor_input", None)
+                    else self.fullscreen_text_input.text if getattr(self, "fullscreen_text_input", None)
+                    and self.current_file_format in ("txt", "pdf") else self.root.ids.file_content_view.text)
         writers = {
             "txt": lambda: processor.modify_txt_bytes(new_text),
             "docx": lambda: processor.modify_word_bytes(self.current_file_bytes, new_text),

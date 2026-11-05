@@ -1,6 +1,7 @@
 <intent-filter android:label="Открыть в Листе">
     <action android:name="android.intent.action.VIEW" />
     <action android:name="android.intent.action.EDIT" />
+    <action android:name="android.intent.action.SEND" />
     <category android:name="android.intent.category.DEFAULT" />
     <category android:name="android.intent.category.BROWSABLE" />
     <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
