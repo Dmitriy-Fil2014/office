@@ -115,7 +115,7 @@ class DocumentLocalApp(MDApp):
                                                  size_hint_y=None, height="48dp"))
                     return
             root_path = str(autoclass("android.os.Environment").getExternalStorageDirectory().getAbsolutePath())
-            allowed = (".docx", ".xlsx", ".pptx", ".pdf", ".txt")
+            allowed = (".docx", ".odt", ".xlsx", ".pptx", ".pdf", ".txt", ".rtf", ".csv", ".md")
             found = []
             for base, dirs, files in os.walk(root_path):
                 dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails")]
@@ -156,6 +156,20 @@ class DocumentLocalApp(MDApp):
                 self.show_spreadsheet_editor()
             elif self.current_file_format == "docx":
                 self.show_word_editor()
+                self.root.ids.status_label.text = "Открыт документ Word: " + self.current_file_name
+                return
+            if self.current_file_format == "odt":
+                from odt_support import read_odt_bytes
+                text = read_odt_bytes(self.current_file_bytes)
+                self.root.ids.file_content_view.text = text
+                self.root.ids.save_btn.disabled = False
+                self.show_fullscreen_text_editor(text)
+                self.root.ids.status_label.text = "Открыт документ ODT: " + self.current_file_name
+                return
+            elif self.current_file_format == "odt":
+                from odt_support import read_odt_bytes
+                self.root.ids.file_content_view.text = read_odt_bytes(data)
+                self.show_fullscreen_text_editor(self.root.ids.file_content_view.text)
             elif self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
                 self.show_presentation_editor()
@@ -163,7 +177,7 @@ class DocumentLocalApp(MDApp):
                 self.show_image_viewer()
                 self.root.ids.save_btn.disabled = True
             else:
-                readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes}
+                readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes, "rtf": processor.read_txt_bytes, "csv": processor.read_txt_bytes, "md": processor.read_txt_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
                 self.show_fullscreen_text_editor(self.root.ids.file_content_view.text)
             self.root.ids.save_btn.disabled = (self.current_file_format == "image")
@@ -678,7 +692,7 @@ class DocumentLocalApp(MDApp):
                 self.root.ids.status_label.text = "Открыто изображение: " + self.current_file_name
                 return
 
-            readers = {"txt": DocumentProcessor.read_txt_bytes, "pdf": DocumentProcessor.read_pdf_bytes}
+            readers = {"txt": DocumentProcessor.read_txt_bytes, "pdf": DocumentProcessor.read_pdf_bytes, "rtf": DocumentProcessor.read_txt_bytes, "csv": DocumentProcessor.read_txt_bytes, "md": DocumentProcessor.read_txt_bytes}
             text = readers[self.current_file_format](self.current_file_bytes)
             self.root.ids.file_content_view.text = text
             self.root.ids.save_btn.disabled = False
@@ -1126,12 +1140,16 @@ class DocumentLocalApp(MDApp):
         processor = self._get_processor()
         new_text = (self.word_editor_input.text if self.current_file_format == "docx" and getattr(self, "word_editor_input", None)
                     else self.fullscreen_text_input.text if getattr(self, "fullscreen_text_input", None)
-                    and self.current_file_format in ("txt", "pdf") else self.root.ids.file_content_view.text)
+                    and self.current_file_format in ("txt", "pdf", "odt", "rtf", "csv", "md") else self.root.ids.file_content_view.text)
         writers = {
             "txt": lambda: processor.modify_txt_bytes(new_text),
             "docx": lambda: processor.modify_word_bytes(self.current_file_bytes, new_text),
             "xlsx": lambda: processor.modify_excel_bytes(self.current_file_bytes, new_text),
             "pdf": lambda: processor.modify_pdf_bytes(self.current_file_bytes, new_text),
+            "odt": lambda: __import__("odt_support").modify_odt_bytes(self.current_file_bytes, new_text),
+            "rtf": lambda: processor.modify_txt_bytes(new_text),
+            "csv": lambda: processor.modify_txt_bytes(new_text),
+            "md": lambda: processor.modify_txt_bytes(new_text),
             "pptx": lambda: processor.modify_pptx_bytes(self.current_file_bytes, new_text),
         }
         return writers[self.current_file_format]()
