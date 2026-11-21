@@ -156,28 +156,20 @@ class DocumentLocalApp(MDApp):
                 self.show_spreadsheet_editor()
             elif self.current_file_format == "docx":
                 self.show_word_editor()
-                self.root.ids.status_label.text = "Открыт документ Word: " + self.current_file_name
-                return
-            if self.current_file_format == "odt":
-                from odt_support import read_odt_bytes
-                text = read_odt_bytes(self.current_file_bytes)
-                self.root.ids.file_content_view.text = text
-                self.root.ids.save_btn.disabled = False
-                self.show_fullscreen_text_editor(text)
-                self.root.ids.status_label.text = "Открыт документ ODT: " + self.current_file_name
-                return
             elif self.current_file_format == "odt":
                 from odt_support import read_odt_bytes
-                self.root.ids.file_content_view.text = read_odt_bytes(data)
-                self.show_fullscreen_text_editor(self.root.ids.file_content_view.text)
+                text = read_odt_bytes(data)
+                self.root.ids.file_content_view.text = text
+                self.show_fullscreen_text_editor(text)
             elif self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
                 self.show_presentation_editor()
             elif self.current_file_format == "image":
                 self.show_image_viewer()
-                self.root.ids.save_btn.disabled = True
             else:
-                readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes, "rtf": processor.read_txt_bytes, "csv": processor.read_txt_bytes, "md": processor.read_txt_bytes}
+                readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes,
+                           "rtf": processor.read_txt_bytes, "csv": processor.read_txt_bytes,
+                           "md": processor.read_txt_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
                 self.show_fullscreen_text_editor(self.root.ids.file_content_view.text)
             self.root.ids.save_btn.disabled = (self.current_file_format == "image")
@@ -680,6 +672,14 @@ class DocumentLocalApp(MDApp):
             if self.current_file_format == "docx":
                 self.show_word_editor()
                 self.root.ids.status_label.text = "Открыт документ Word: " + self.current_file_name
+                return
+            if self.current_file_format == "odt":
+                from odt_support import read_odt_bytes
+                text = read_odt_bytes(self.current_file_bytes)
+                self.root.ids.file_content_view.text = text
+                self.root.ids.save_btn.disabled = False
+                self.show_fullscreen_text_editor(text)
+                self.root.ids.status_label.text = "Открыт документ ODT: " + self.current_file_name
                 return
             if self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = DocumentProcessor.read_pptx_bytes(self.current_file_bytes)
