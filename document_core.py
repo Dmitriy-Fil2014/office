@@ -48,6 +48,8 @@ class DocumentProcessor:
             try:
                 with zipfile.ZipFile(io.BytesIO(file_bytes)) as package:
                     members = set(package.namelist())
+                if "content.xml" in members and "mimetype" in members:
+                    return "odt"
                 if "[Content_Types].xml" in members:
                     if "word/document.xml" in members:
                         return "docx"
@@ -59,6 +61,10 @@ class DocumentProcessor:
                 pass
         by_extension = {
             ".txt": "txt",
+            ".odt": "odt",
+            ".rtf": "rtf",
+            ".csv": "csv",
+            ".md": "md",
             ".png": "image",
             ".jpg": "image",
             ".jpeg": "image",
@@ -76,6 +82,10 @@ class DocumentProcessor:
             return by_extension[extension]
         by_mime = {
             "text/plain": "txt",
+            "application/vnd.oasis.opendocument.text": "odt",
+            "application/rtf": "rtf",
+            "text/csv": "csv",
+            "text/markdown": "md",
             "image/png": "image",
             "image/jpeg": "image",
             "image/webp": "image",
@@ -90,7 +100,7 @@ class DocumentProcessor:
         if mime_type in by_mime:
             return by_mime[mime_type]
         raise ValueError(
-            "Формат не поддерживается. Используйте TXT, DOCX, XLSX, PPTX или PDF."
+            "Формат не поддерживается. Используйте ODT, DOCX, XLSX, PPTX, PDF, TXT, RTF, CSV или MD."
         )
 
     @staticmethod
