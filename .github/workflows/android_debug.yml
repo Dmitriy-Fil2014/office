@@ -47,9 +47,14 @@ jobs:
           echo "ANDROIDNDK=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           mkdir -p "$HOME/.buildozer/android/platform"
           ln -sfn "$ANDROID_HOME" "$HOME/.buildozer/android/platform/android-sdk"
-          # python-for-android 2024 expects the legacy tools/bin/sdkmanager path.
-          mkdir -p "$ANDROID_HOME/tools"
-          ln -sfn "$ANDROID_HOME/cmdline-tools/latest/bin" "$ANDROID_HOME/tools/bin"
+          # python-for-android calls the legacy path; use a wrapper so sdkmanager
+          # resolves its own libraries from cmdline-tools/latest.
+          mkdir -p "$ANDROID_HOME/tools/bin"
+          cat > "$ANDROID_HOME/tools/bin/sdkmanager" <<EOF
+          #!/usr/bin/env bash
+          exec "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "\$@"
+          EOF
+          chmod +x "$ANDROID_HOME/tools/bin/sdkmanager"
       - name: Установить Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
