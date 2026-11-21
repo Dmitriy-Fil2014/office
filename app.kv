@@ -1,46 +1,149 @@
 MDScreen:
-    md_bg_color: (0.95, 0.97, 1, 1) if app.theme_cls.theme_style == 'Light' else (0.055, 0.075, 0.12, 1)
+    md_bg_color: (0.955, 0.967, 0.985, 1) if app.theme_cls.theme_style == 'Light' else (0.035, 0.055, 0.09, 1)
 
     FloatLayout:
         MDBoxLayout:
             orientation: "vertical"
-            padding: "16dp"
-            spacing: "14dp"
+            padding: ["16dp", "8dp", "16dp", "12dp"]
+            spacing: "12dp"
 
             MDTopAppBar:
                 id: app_title
                 title: "Лист"
                 elevation: 0
-                md_bg_color: (0.95, 0.97, 1, 1) if app.theme_cls.theme_style == 'Light' else (0.055, 0.075, 0.12, 1)
-                specific_text_color: (0.10, 0.18, 0.30, 1) if app.theme_cls.theme_style == 'Light' else (0.95, 0.97, 1, 1)
-                right_action_items: [["image-plus", lambda x: app.add_picture_to_document()], ["table-plus", lambda x: app.add_table_to_word()], ["plus-box", lambda x: app.add_slide_to_presentation()], ["monitor", lambda x: app.toggle_editor_view_mode()], ["cog", lambda x: app.show_settings_menu()], ["shield-check", lambda x: app.show_info_menu()]]
+                md_bg_color: (0.955, 0.967, 0.985, 1) if app.theme_cls.theme_style == 'Light' else (0.035, 0.055, 0.09, 1)
+                specific_text_color: (0.10, 0.16, 0.25, 1) if app.theme_cls.theme_style == 'Light' else (0.94, 0.96, 1, 1)
+                right_action_items: [["magnify", lambda x: app.open_system_storage()], ["cog-outline", lambda x: app.show_settings_menu()], ["dots-vertical", lambda x: app.show_info_menu()]]
 
             MDCard:
                 orientation: "vertical"
-                padding: "18dp"
-                spacing: "6dp"
+                padding: ["18dp", "18dp", "18dp", "16dp"]
+                spacing: "8dp"
                 size_hint_y: None
-                height: "112dp"
-                radius: [22, 22, 22, 22]
-                elevation: 2
-                md_bg_color: app.theme_cls.bg_normal
+                height: "158dp"
+                radius: [26, 26, 26, 26]
+                elevation: 3
+                md_bg_color: (0.075, 0.24, 0.20, 1) if app.theme_cls.theme_style == 'Light' else (0.08, 0.20, 0.18, 1)
+
+                MDLabel:
+                    text: "ВАШЕ ПРОСТРАНСТВО"
+                    font_style: "Overline"
+                    theme_text_color: "Custom"
+                    text_color: 0.72, 0.88, 0.80, 1
+                    size_hint_y: None
+                    height: "22dp"
 
                 MDLabel:
                     id: workspace_title
-                    text: "Ваше рабочее пространство"
-                    font_style: "H6"
+                    text: "Всё для ваших идей"
+                    font_style: "H5"
                     bold: True
-                    theme_text_color: "Primary"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
                     size_hint_y: None
-                    height: "34dp"
+                    height: "42dp"
 
                 MDLabel:
                     id: status_label
-                    text: "Создавайте и редактируйте документы на устройстве"
-                    theme_text_color: "Secondary"
+                    text: "Документы, таблицы и презентации — в одном месте"
                     font_style: "Body2"
+                    theme_text_color: "Custom"
+                    text_color: 0.86, 0.93, 0.89, 1
                     size_hint_y: None
-                    height: "42dp"
+                    height: "38dp"
+
+            MDBoxLayout:
+                orientation: "horizontal"
+                size_hint_y: None
+                height: "94dp"
+                spacing: "10dp"
+
+                MDCard:
+                    orientation: "vertical"
+                    padding: "10dp"
+                    spacing: "4dp"
+                    radius: [20, 20, 20, 20]
+                    elevation: 1
+                    md_bg_color: app.theme_cls.bg_normal
+                    MDIconButton:
+                        icon: "file-document-edit-outline"
+                        theme_text_color: "Custom"
+                        text_color: 0.16, 0.55, 0.42, 1
+                        on_release: app.create_new_document("docx")
+                    MDLabel:
+                        text: "Документ"
+                        halign: "center"
+                        font_style: "Caption"
+                        theme_text_color: "Primary"
+
+                MDCard:
+                    orientation: "vertical"
+                    padding: "10dp"
+                    spacing: "4dp"
+                    radius: [20, 20, 20, 20]
+                    elevation: 1
+                    md_bg_color: app.theme_cls.bg_normal
+                    MDIconButton:
+                        icon: "microsoft-excel"
+                        theme_text_color: "Custom"
+                        text_color: 0.16, 0.55, 0.42, 1
+                        on_release: app.create_new_document("xlsx")
+                    MDLabel:
+                        text: "Таблица"
+                        halign: "center"
+                        font_style: "Caption"
+                        theme_text_color: "Primary"
+
+                MDCard:
+                    orientation: "vertical"
+                    padding: "10dp"
+                    spacing: "4dp"
+                    radius: [20, 20, 20, 20]
+                    elevation: 1
+                    md_bg_color: app.theme_cls.bg_normal
+                    MDIconButton:
+                        icon: "presentation"
+                        theme_text_color: "Custom"
+                        text_color: 0.16, 0.55, 0.42, 1
+                        on_release: app.create_new_document("pptx")
+                    MDLabel:
+                        text: "Слайды"
+                        halign: "center"
+                        font_style: "Caption"
+                        theme_text_color: "Primary"
+
+                MDCard:
+                    orientation: "vertical"
+                    padding: "10dp"
+                    spacing: "4dp"
+                    radius: [20, 20, 20, 20]
+                    elevation: 1
+                    md_bg_color: app.theme_cls.bg_normal
+                    MDIconButton:
+                        icon: "file-pdf-box"
+                        theme_text_color: "Custom"
+                        text_color: 0.16, 0.55, 0.42, 1
+                        on_release: app.open_system_storage()
+                    MDLabel:
+                        text: "PDF"
+                        halign: "center"
+                        font_style: "Caption"
+                        theme_text_color: "Primary"
+
+            MDBoxLayout:
+                orientation: "horizontal"
+                size_hint_y: None
+                height: "34dp"
+                MDLabel:
+                    text: "Недавние файлы"
+                    font_style: "H6"
+                    bold: True
+                    theme_text_color: "Primary"
+                MDLabel:
+                    text: "НА УСТРОЙСТВЕ"
+                    halign: "right"
+                    font_style: "Overline"
+                    theme_text_color: "Secondary"
 
             ScrollView:
                 size_hint_y: 1
@@ -51,8 +154,8 @@ MDScreen:
                     orientation: "vertical"
                     size_hint_y: None
                     height: self.minimum_height
-                    spacing: "6dp"
-                    padding: "2dp"
+                    spacing: "8dp"
+                    padding: ["0dp", "2dp", "0dp", "8dp"]
 
             MDCard:
                 id: editor_card
@@ -63,18 +166,16 @@ MDScreen:
                 padding: "12dp"
                 radius: [22, 22, 22, 22]
                 elevation: 2
-                md_bg_color: 1, 1, 1, 1
-
+                md_bg_color: app.theme_cls.bg_normal
                 MDBoxLayout:
                     orientation: "horizontal"
                     size_hint_y: None
                     height: "36dp"
                     spacing: "8dp"
-                    MDLabel:
-                        text: "✎"
-                        font_style: "H6"
+                    MDIcon:
+                        icon: "file-edit-outline"
                         theme_text_color: "Custom"
-                        text_color: 0.12, 0.48, 0.88, 1
+                        text_color: 0.16, 0.55, 0.42, 1
                         size_hint_x: None
                         width: "28dp"
                     MDLabel:
@@ -83,7 +184,6 @@ MDScreen:
                         font_style: "Subtitle1"
                         bold: True
                         theme_text_color: "Primary"
-
                 ScrollView:
                     do_scroll_x: False
                     do_scroll_y: True
@@ -95,47 +195,47 @@ MDScreen:
                         mode: "rectangle"
                         size_hint_y: None
                         height: max(self.minimum_height, root.height * 0.56)
-                        hint_text: "Откройте документ или создайте новый…"
+                        hint_text: "Текст документа"
                         font_size: "16sp"
-                        line_color_focus: 0.12, 0.48, 0.88, 1
+                        line_color_focus: 0.16, 0.55, 0.42, 1
 
             MDBoxLayout:
                 orientation: "horizontal"
                 spacing: "8dp"
                 size_hint_y: None
-                height: "54dp"
+                height: "56dp"
 
                 MDFillRoundFlatIconButton:
                     id: create_btn
                     text: "Создать"
-                    icon: "plus-circle"
+                    icon: "plus"
                     on_release: app.show_new_document_menu()
-                    size_hint_x: 0.33
-                    md_bg_color: 0.12, 0.48, 0.88, 1
+                    size_hint_x: 0.34
+                    md_bg_color: 0.12, 0.48, 0.36, 1
 
                 MDFillRoundFlatIconButton:
                     id: open_btn
                     text: "Открыть"
-                    icon: "folder-open"
+                    icon: "folder-open-outline"
                     on_release: app.open_system_storage()
-                    size_hint_x: 0.25
-                    md_bg_color: 0.16, 0.60, 0.68, 1
+                    size_hint_x: 0.30
+                    md_bg_color: 0.16, 0.48, 0.62, 1
 
                 MDFillRoundFlatIconButton:
                     text: "Папка"
-                    icon: "folder-plus"
+                    icon: "folder-plus-outline"
                     on_release: app.request_folder_access()
-                    size_hint_x: 0.25
-                    md_bg_color: 0.35, 0.48, 0.70, 1
+                    size_hint_x: 0.20
+                    md_bg_color: 0.30, 0.40, 0.56, 1
 
                 MDFillRoundFlatIconButton:
                     id: save_btn
                     text: "Сохранить"
-                    icon: "content-save"
+                    icon: "content-save-outline"
                     on_release: app.save_changes_to_storage()
                     disabled: True
-                    size_hint_x: 0.25
-                    md_bg_color: 0.30, 0.38, 0.52, 1
+                    size_hint_x: 0.32
+                    md_bg_color: 0.20, 0.42, 0.34, 1
 
         MDCard:
             id: splash_layer
