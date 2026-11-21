@@ -1,0 +1,84 @@
+name: Лист — debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/leaf-modern-office-debug
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug:
+    name: Сборка отладочного APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      BUILDOZER_ALLOW_KIVY_BUILD_FROM_ROOT: "1"
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Получить исходный код
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Установить системные зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git zip unzip autoconf automake autopoint libtool libtool-bin pkg-config cmake gettext zlib1g-dev libncurses5-dev libncursesw5-dev libffi-dev libssl-dev libsqlite3-dev libxml2-dev libxslt1-dev
+      - name: Установить Android SDK и NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses
+          set -o pipefail
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;28.2.13676358"
+          echo "ANDROIDSDK=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROIDNDK=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.buildozer/android/platform"
+          ln -sfn "$ANDROID_HOME" "$HOME/.buildozer/android/platform/android-sdk"
+      - name: Установить Buildozer
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "buildozer==1.5.0" "Cython==0.29.36"
+          python -m pip install "python-docx" "openpyxl" "pypdf" "python-pptx" "lxml==4.9.3" "typing_extensions==4.12.2"
+      - name: Проверить Python и ODT
+        run: |
+          python -m py_compile main.py document_core.py odt_support.py
+          python - <<'PY'
+          import io, zipfile
+          from odt_support import read_odt_bytes, modify_odt_bytes
+          xml = b'''<?xml version="1.0"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>Original</text:p></office:text></office:body></office:document-content>'''
+          buf=io.BytesIO()
+          with zipfile.ZipFile(buf,"w") as z:
+              z.writestr("mimetype","application/vnd.oasis.opendocument.text",compress_type=zipfile.ZIP_STORED)
+              z.writestr("content.xml",xml)
+          result=modify_odt_bytes(buf.getvalue(),"Edited")
+          assert read_odt_bytes(result)=="Edited"
+          print("ODT smoke test passed")
+          PY
+      - name: Собрать debug APK
+        run: |
+          buildozer -v android debug
+          mkdir -p dist
+          mapfile -t apks < <(find bin -maxdepth 1 -type f -name '*-debug.apk' -print)
+          test "${#apks[@]}" -ge 1
+          cp "${apks[0]}" dist/List-debug.apk
+          ls -lh dist/List-debug.apk
+      - name: Загрузить APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: List-Debug-APK
+          path: dist/List-debug.apk
+          if-no-files-found: error
+          retention-days: 14
