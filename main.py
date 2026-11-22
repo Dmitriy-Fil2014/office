@@ -63,12 +63,12 @@ class DocumentLocalApp(MDApp):
             self.apply_preferences()
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
-        # Request Android storage access as soon as the first screen is ready.
+        # Keep first launch quiet: opening a file picker does not require
+        # broad storage permission. Ask for folder access only when requested.
         Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._hide_splash, 2.0)
-        Clock.schedule_once(self.request_all_files_access, 0.85)
-        Clock.schedule_once(self._open_shared_file, 1.0)
-        Clock.schedule_once(lambda _dt: self.refresh_document_list(), 1.2)
+        Clock.schedule_once(self._hide_splash, 1.8)
+        Clock.schedule_once(self._open_shared_file, 0.35)
+        Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.55)
 
     def request_all_files_access(self, *_):
         if platform != "android":
@@ -98,6 +98,20 @@ class DocumentLocalApp(MDApp):
             Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.5)
         except Exception:
             pass
+
+    def open_android_app_settings(self):
+        """Open this app's Android settings so permissions can be changed later."""
+        if platform != "android":
+            return
+        try:
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            intent = Intent("android.settings.APPLICATION_DETAILS_SETTINGS")
+            intent.setData(Uri.parse("package:" + str(current.getPackageName())))
+            current.startActivity(intent)
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось открыть настройки Android: " + str(exc)
 
     def refresh_document_list(self):
         try:
@@ -303,6 +317,14 @@ class DocumentLocalApp(MDApp):
         for label, mode in ([("Системная", "system"), ("Светлая", "light"), ("Тёмная", "dark")] if not en else [("System", "system"), ("Light", "light"), ("Dark", "dark")]):
             card.add_widget(MDFillRoundFlatButton(text=label, size_hint_x=1,
                 on_release=lambda *_, value=mode: (modal.dismiss(), self.set_theme_mode(value))))
+        card.add_widget(MDLabel(text="Доступ к файлам" if not en else "File access",
+                                size_hint_y=None, height="26dp", theme_text_color="Secondary"))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Разрешения приложения Android" if not en else "Android app permissions",
+            size_hint_x=1, on_release=lambda *_: self.open_android_app_settings()))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Разрешить доступ ко всем файлам" if not en else "Allow access to all files",
+            size_hint_x=1, on_release=lambda *_: self.request_all_files_access()))
         card.add_widget(MDLabel(text="Документы и соглашения" if not en else "Documents & legal",
                                 size_hint_y=None, height="26dp", theme_text_color="Secondary"))
         card.add_widget(MDFillRoundFlatButton(
@@ -488,10 +510,12 @@ class DocumentLocalApp(MDApp):
             intent.setType("*/*")
             mime_types = [
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.oasis.opendocument.text",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/pdf",
-                "text/plain",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "application/pdf", "application/rtf", "text/rtf",
+                "text/plain", "text/csv", "text/markdown",
+                "image/*", "application/octet-stream",
             ]
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mime_types)
             activity.bind(on_activity_result=self.on_file_selected)
@@ -1002,7 +1026,8 @@ class DocumentLocalApp(MDApp):
             on_release=lambda *_: modal.dismiss()))
         editor = TextInput(text=text, multiline=True, font_size="18sp",
                            size_hint=(1, 1), background_color=(0.98,0.98,0.98,1),
-                           foreground_color=(0.08,0.10,0.13,1), padding="12dp")
+                           foreground_color=(0.08,0.10,0.13,1), padding="12dp",
+                           keyboard_mode="managed")
         outer.add_widget(header)
         outer.add_widget(editor)
         modal.add_widget(outer)
