@@ -114,47 +114,85 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Не удалось открыть настройки Android: " + str(exc)
 
     def refresh_document_list(self):
+        """Scan storage in small UI-thread batches instead of freezing startup."""
         try:
             container = self.root.ids.documents_list
             container.clear_widgets()
             if platform != "android":
-                container.add_widget(MDLabel(text="Документы появятся здесь после предоставления доступа к хранилищу.",
-                                             size_hint_y=None, height="48dp"))
+                container.add_widget(MDLabel(
+                    text="Документы появятся здесь после запуска на Android.",
+                    size_hint_y=None, height="48dp"))
                 return
             BuildVersion = autoclass("android.os.Build$VERSION")
             if int(BuildVersion.SDK_INT) >= 30:
                 Environment = autoclass("android.os.Environment")
                 if not Environment.isExternalStorageManager():
-                    container.add_widget(MDLabel(text="Разрешите доступ ко всем файлам в настройках Android.",
-                                                 size_hint_y=None, height="48dp"))
+                    container.add_widget(MDLabel(
+                        text="Для списка файлов откройте Настройки → Доступ к файлам.",
+                        size_hint_y=None, height="48dp"))
                     return
-            root_path = str(autoclass("android.os.Environment").getExternalStorageDirectory().getAbsolutePath())
-            allowed = (".docx", ".odt", ".xlsx", ".pptx", ".pdf", ".txt", ".rtf", ".csv", ".md")
-            found = []
-            for base, dirs, files in os.walk(root_path):
-                dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails")]
-                for filename in files:
-                    if filename.lower().endswith(allowed):
-                        path = os.path.join(base, filename)
-                        found.append(path)
-                if len(found) >= 500:
-                    break
-            found.sort(key=lambda p: os.path.basename(p).lower())
-            for path in found:
-                name = os.path.basename(path)
-                button = MDFillRoundFlatButton(
-                    text=name, size_hint_x=1,
-                    on_release=lambda *_ , selected=path: self.open_local_document(selected))
-                container.add_widget(button)
-            if not found:
-                container.add_widget(MDLabel(text="Документы не найдены. Поддерживаются DOCX, XLSX, PPTX, PDF и TXT.",
-                                             size_hint_y=None, height="56dp"))
-            self.root.ids.status_label.text = "Документов найдено: " + str(len(found))
+            root_path = str(autoclass("android.os.Environment")
+                            .getExternalStorageDirectory().getAbsolutePath())
+            allowed = (".docx", ".odt", ".xlsx", ".pptx", ".pdf", ".txt",
+                       ".rtf", ".csv", ".md", ".png", ".jpg", ".jpeg",
+                       ".webp", ".gif")
+            self._document_scan = {
+                "walk": os.walk(root_path),
+                "allowed": allowed,
+                "found": [],
+                "container": container,
+            }
+            self.root.ids.status_label.text = "Ищем документы…"
+            Clock.schedule_once(self._scan_document_batch, 0)
         except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось загрузить список документов: " + str(exc)
+
+    def _scan_document_batch(self, _dt):
+        state = getattr(self, "_document_scan", None)
+        if not state:
+            return
+        found = state["found"]
+        try:
+            # Process only a small number of directory entries per frame so
+            # the interface remains responsive on phones with large storage.
+            budget = 80
+            while budget > 0 and len(found) < 500:
+                base, dirs, files = next(state["walk"])
+                dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails", ".cache")]
+                for filename in files:
+                    if filename.lower().endswith(state["allowed"]):
+                        found.append(os.path.join(base, filename))
+                        if len(found) >= 500:
+                            break
+                budget -= 1
+        except StopIteration:
+            pass
+        except Exception as exc:
+            self.root.ids.status_label.text = "Ошибка чтения папок: " + str(exc)
+            self._document_scan = None
+            return
+        finished = len(found) >= 500
+        if not finished:
+            # A completed walk is detected when the iterator is exhausted.
             try:
-                self.root.ids.status_label.text = "Не удалось загрузить список документов: " + str(exc)
+                Clock.schedule_once(self._scan_document_batch, 0)
+                return
             except Exception:
                 pass
+        found.sort(key=lambda path: os.path.basename(path).lower())
+        container = state["container"]
+        container.clear_widgets()
+        for path in found:
+            button = MDFillRoundFlatButton(
+                text=os.path.basename(path), size_hint_x=1,
+                on_release=lambda *_ , selected=path: self.open_local_document(selected))
+            container.add_widget(button)
+        if not found:
+            container.add_widget(MDLabel(
+                text="Документы не найдены. Откройте файл через кнопку «Открыть».",
+                size_hint_y=None, height="56dp"))
+        self.root.ids.status_label.text = "Документов найдено: " + str(len(found))
+        self._document_scan = None
 
     def open_local_document(self, path):
         try:
