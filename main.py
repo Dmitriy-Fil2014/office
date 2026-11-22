@@ -156,6 +156,7 @@ class DocumentLocalApp(MDApp):
             # Process only a small number of directory entries per frame so
             # the interface remains responsive on phones with large storage.
             budget = 80
+            finished = False
             while budget > 0 and len(found) < 500:
                 base, dirs, files = next(state["walk"])
                 dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails", ".cache")]
@@ -166,12 +167,12 @@ class DocumentLocalApp(MDApp):
                             break
                 budget -= 1
         except StopIteration:
-            pass
+            finished = True
         except Exception as exc:
             self.root.ids.status_label.text = "Ошибка чтения папок: " + str(exc)
             self._document_scan = None
             return
-        finished = len(found) >= 500
+        finished = finished or len(found) >= 500
         if not finished:
             # A completed walk is detected when the iterator is exhausted.
             try:
