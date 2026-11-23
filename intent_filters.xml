@@ -15,6 +15,4 @@
     <data android:mimeType="text/plain" />
     <data android:mimeType="text/csv" />
     <data android:mimeType="text/markdown" />
-    <data android:mimeType="image/*" />
-    <data android:mimeType="application/octet-stream" />
 </intent-filter>
