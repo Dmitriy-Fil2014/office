@@ -63,12 +63,10 @@ class DocumentLocalApp(MDApp):
             self.apply_preferences()
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
-        # Keep first launch quiet: opening a file picker does not require
-        # broad storage permission. Ask for folder access only when requested.
-        Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._hide_splash, 0.8)
+        # Android Storage Access Framework avoids broad permissions and startup scans.
+        Clock.schedule_once(self._finish_startup, 0.2)
+        Clock.schedule_once(self._hide_splash, 0.15)
         Clock.schedule_once(self._open_shared_file, 0.35)
-        Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.55)
 
     def request_all_files_access(self, *_):
         if platform != "android":
@@ -114,38 +112,20 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Не удалось открыть настройки Android: " + str(exc)
 
     def refresh_document_list(self):
-        """Scan storage in small UI-thread batches instead of freezing startup."""
+        """Do not recursively scan shared storage; use Android's document picker."""
         try:
             container = self.root.ids.documents_list
             container.clear_widgets()
-            if platform != "android":
-                container.add_widget(MDLabel(
-                    text="Документы появятся здесь после запуска на Android.",
-                    size_hint_y=None, height="48dp"))
-                return
-            BuildVersion = autoclass("android.os.Build$VERSION")
-            if int(BuildVersion.SDK_INT) >= 30:
-                Environment = autoclass("android.os.Environment")
-                if not Environment.isExternalStorageManager():
-                    container.add_widget(MDLabel(
-                        text="Для списка файлов откройте настройки Android и включите «Доступ ко всем файлам».",
-                        size_hint_y=None, height="48dp"))
-                    return
-            root_path = str(autoclass("android.os.Environment")
-                            .getExternalStorageDirectory().getAbsolutePath())
-            allowed = (".docx", ".odt", ".xlsx", ".pptx", ".pdf", ".txt",
-                       ".rtf", ".csv", ".md", ".png", ".jpg", ".jpeg",
-                       ".webp", ".gif")
-            self._document_scan = {
-                "walk": os.walk(root_path),
-                "allowed": allowed,
-                "found": [],
-                "container": container,
-            }
-            self.root.ids.status_label.text = "Ищем документы…"
-            Clock.schedule_once(self._scan_document_batch, 0)
+            hint = MDLabel(
+                text="Недавние документы появятся здесь. Нажмите «Открыть», чтобы выбрать файл.",
+                size_hint_y=None, height="64dp", halign="left", valign="middle")
+            hint.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
+            container.add_widget(hint)
         except Exception as exc:
-            self.root.ids.status_label.text = "Не удалось загрузить список документов: " + str(exc)
+            try:
+                self.root.ids.status_label.text = "Не удалось обновить список: " + str(exc)
+            except Exception:
+                pass
 
     def _scan_document_batch(self, _dt):
         state = getattr(self, "_document_scan", None)
@@ -362,8 +342,8 @@ class DocumentLocalApp(MDApp):
             text="Разрешения приложения Android" if not en else "Android app permissions",
             size_hint_x=1, on_release=lambda *_: self.open_android_app_settings()))
         card.add_widget(MDFillRoundFlatButton(
-            text="Разрешить доступ ко всем файлам" if not en else "Allow access to all files",
-            size_hint_x=1, on_release=lambda *_: self.request_all_files_access()))
+            text="Выбрать документы" if not en else "Choose documents",
+            size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.open_system_storage())))
         card.add_widget(MDLabel(text="Документы и соглашения" if not en else "Documents & legal",
                                 size_hint_y=None, height="26dp", theme_text_color="Secondary"))
         card.add_widget(MDFillRoundFlatButton(
@@ -394,10 +374,8 @@ class DocumentLocalApp(MDApp):
 
     def _finish_startup(self, _dt):
         try:
-            if self.config.get("General", "accepted_legal") == "0":
+            if self.config.get("General", "accepted_legal") != "1":
                 self.show_mandatory_consent_dialog()
-            else:
-                self._maybe_prompt_file_access()
         except Exception as exc:
             self._write_startup_error("Ошибка первого запуска")
             try:
@@ -451,7 +429,7 @@ class DocumentLocalApp(MDApp):
         self.config.write()
         if self.consent_dialog:
             self.consent_dialog.dismiss()
-        Clock.schedule_once(lambda _dt: self._maybe_prompt_file_access(), 0.25)
+        self.root.ids.status_label.text = "Готово. Выберите документ кнопкой «Открыть»."
 
     def _maybe_prompt_file_access(self):
         """Explain Android's special all-files setting once, then offer a shortcut."""
@@ -608,7 +586,6 @@ class DocumentLocalApp(MDApp):
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 "application/pdf", "application/rtf", "text/rtf",
                 "text/plain", "text/csv", "text/markdown",
-                "image/*", "application/octet-stream",
             ]
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mime_types)
             activity.bind(on_activity_result=self.on_file_selected)
