@@ -97,6 +97,31 @@ class DocumentLocalApp(MDApp):
         except Exception:
             pass
 
+    def revoke_document_access(self, *_):
+        """Release all persistable document/folder grants made through Android's picker."""
+        if platform != "android":
+            return
+        try:
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            resolver = current.getContentResolver()
+            Intent = autoclass("android.content.Intent")
+            grants = resolver.getPersistedUriPermissions()
+            released = 0
+            for grant in grants.toArray():
+                flags = 0
+                if grant.isReadPermission():
+                    flags |= Intent.FLAG_GRANT_READ_URI_PERMISSION
+                if grant.isWritePermission():
+                    flags |= Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                if flags:
+                    resolver.releasePersistableUriPermission(grant.getUri(), flags)
+                    released += 1
+            self.root.ids.status_label.text = (
+                "Доступ к ранее выбранным файлам отозван: " + str(released)
+            )
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось отозвать доступ: " + str(exc)
+
     def open_android_app_settings(self):
         """Open this app's Android settings so permissions can be changed later."""
         if platform != "android":
@@ -344,6 +369,9 @@ class DocumentLocalApp(MDApp):
         card.add_widget(MDFillRoundFlatButton(
             text="Выбрать документы" if not en else "Choose documents",
             size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.open_system_storage())))
+        card.add_widget(MDFillRoundFlatButton(
+            text="Отозвать доступ к выбранным файлам" if not en else "Revoke access to selected files",
+            size_hint_x=1, on_release=lambda *_: (modal.dismiss(), self.revoke_document_access())))
         card.add_widget(MDLabel(text="Документы и соглашения" if not en else "Documents & legal",
                                 size_hint_y=None, height="26dp", theme_text_color="Secondary"))
         card.add_widget(MDFillRoundFlatButton(
