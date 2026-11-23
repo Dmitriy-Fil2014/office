@@ -40,7 +40,7 @@ class DocumentLocalApp(MDApp):
     def build(self):
         self.theme_cls.primary_palette = "Blue"
         self.theme_cls.accent_palette = "LightBlue"
-        self.config.setdefaults("General", {"accepted_legal": "0", "theme_mode": "system", "language": "ru", "editor_view_mode": "desktop"})
+        self.config.setdefaults("General", {"accepted_legal": "0", "file_access_prompted": "0", "theme_mode": "system", "language": "ru", "editor_view_mode": "desktop"})
         try:
             return Builder.load_file("app.kv")
         except Exception as exc:
@@ -66,7 +66,7 @@ class DocumentLocalApp(MDApp):
         # Keep first launch quiet: opening a file picker does not require
         # broad storage permission. Ask for folder access only when requested.
         Clock.schedule_once(self._finish_startup, 0.65)
-        Clock.schedule_once(self._hide_splash, 1.8)
+        Clock.schedule_once(self._hide_splash, 0.8)
         Clock.schedule_once(self._open_shared_file, 0.35)
         Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.55)
 
@@ -128,7 +128,7 @@ class DocumentLocalApp(MDApp):
                 Environment = autoclass("android.os.Environment")
                 if not Environment.isExternalStorageManager():
                     container.add_widget(MDLabel(
-                        text="Для списка файлов откройте Настройки → Доступ к файлам.",
+                        text="Для списка файлов откройте настройки Android и включите «Доступ ко всем файлам».",
                         size_hint_y=None, height="48dp"))
                     return
             root_path = str(autoclass("android.os.Environment")
@@ -396,6 +396,8 @@ class DocumentLocalApp(MDApp):
         try:
             if self.config.get("General", "accepted_legal") == "0":
                 self.show_mandatory_consent_dialog()
+            else:
+                self._maybe_prompt_file_access()
         except Exception as exc:
             self._write_startup_error("Ошибка первого запуска")
             try:
@@ -449,6 +451,58 @@ class DocumentLocalApp(MDApp):
         self.config.write()
         if self.consent_dialog:
             self.consent_dialog.dismiss()
+        Clock.schedule_once(lambda _dt: self._maybe_prompt_file_access(), 0.25)
+
+    def _maybe_prompt_file_access(self):
+        """Explain Android's special all-files setting once, then offer a shortcut."""
+        if platform != "android":
+            return
+        try:
+            BuildVersion = autoclass("android.os.Build$VERSION")
+            if int(BuildVersion.SDK_INT) < 30:
+                return
+            Environment = autoclass("android.os.Environment")
+            if Environment.isExternalStorageManager():
+                return
+            if self.config.get("General", "file_access_prompted") == "1":
+                return
+            en = getattr(self, "language", "ru") == "en"
+            modal = ModalView(size_hint=(0.92, 0.48), auto_dismiss=False,
+                              background_color=(0.02, 0.05, 0.12, 0.62))
+            card = MDCard(orientation="vertical", padding="18dp", spacing="10dp",
+                          radius=[22, 22, 22, 22], elevation=8,
+                          md_bg_color=self.theme_cls.bg_normal)
+            card.add_widget(MDLabel(
+                text="Доступ к файлам" if not en else "File access",
+                font_style="H6", bold=True, size_hint_y=None, height="42dp"))
+            card.add_widget(MDLabel(
+                text=("Чтобы показывать документы с устройства, разрешите «Доступ ко всем файлам» "
+                      "на следующем экране Android. Это специальный доступ, он не отображается "
+                      "в обычном списке разрешений приложения."
+                      if not en else
+                      "To list documents on this device, allow «All files access» on the next "
+                      "Android screen. Android manages this separately from ordinary app permissions."),
+                size_hint_y=None, height="112dp"))
+            def open_access(*_):
+                self.config.set("General", "file_access_prompted", "1")
+                self.config.write()
+                modal.dismiss()
+                self.request_all_files_access()
+            def later(*_):
+                self.config.set("General", "file_access_prompted", "1")
+                self.config.write()
+                modal.dismiss()
+            card.add_widget(MDFillRoundFlatButton(
+                text="Открыть настройки доступа" if not en else "Open access settings",
+                size_hint_x=1, on_release=open_access))
+            card.add_widget(MDFlatButton(
+                text="Позже" if not en else "Not now",
+                on_release=later))
+            modal.add_widget(card)
+            self.file_access_dialog = modal
+            modal.open()
+        except Exception as exc:
+            self._write_startup_error("Не удалось показать запрос доступа к файлам")
 
     def show_new_document_menu(self):
         en = getattr(self, "language", "ru") == "en"
