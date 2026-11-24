@@ -134,7 +134,7 @@ class DocumentLocalApp(MDApp):
             except Exception:
                 pass
 
-        def revoke_document_access(self, *_):
+    def revoke_document_access(self, *_):
         """Release all persistable document/folder grants made through Android's picker."""
         if platform != "android":
             return
@@ -239,7 +239,7 @@ class DocumentLocalApp(MDApp):
             except Exception:
                 pass
 
-        def open_local_document(self, path):
+    def open_local_document(self, path):
         try:
             processor = self._get_processor()
             with open(path, "rb") as stream:
@@ -331,7 +331,7 @@ class DocumentLocalApp(MDApp):
             except Exception:
                 pass
 
-        def _hide_splash(self, *_):
+    def _hide_splash(self, *_):
         try:
             layer = self.root.ids.splash_layer
             parent = layer.parent
