@@ -64,6 +64,11 @@ jobs:
         run: |
           python -m py_compile main.py document_core.py odt_support.py
           python - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('intent_filters.xml')
+          print('Android intent-filter XML parsed successfully')
+          PY
+          python - <<'PY'
           import io, zipfile
           from odt_support import read_odt_bytes, modify_odt_bytes
           xml = b'''<?xml version="1.0"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>Original</text:p></office:text></office:body></office:document-content>'''
