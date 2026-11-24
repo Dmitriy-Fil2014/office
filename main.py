@@ -75,12 +75,30 @@ class DocumentLocalApp(MDApp):
         Clock.schedule_once(self._after_first_frame, 0)
 
     def _after_first_frame(self, _dt):
-        self._hide_splash()
-        self._finish_startup()
-        opened_external = self._open_shared_file()
+        # Keep each startup stage isolated: a permission or intent error must not
+        # abort the Kivy event loop and leave the user on the launcher.
+        try:
+            self._hide_splash()
+        except Exception:
+            self._write_startup_error("Ошибка скрытия заставки")
+        try:
+            self._finish_startup(0)
+        except Exception:
+            self._write_startup_error("Ошибка завершения запуска")
+        opened_external = False
+        try:
+            opened_external = bool(self._open_shared_file())
+        except Exception:
+            self._write_startup_error("Ошибка обработки входящего документа")
         if platform == "android" and not opened_external:
-            self.request_all_files_access()
-        self.refresh_document_list()
+            try:
+                self.request_all_files_access()
+            except Exception:
+                self._write_startup_error("Ошибка запроса доступа к хранилищу")
+        try:
+            self.refresh_document_list()
+        except Exception:
+            self._write_startup_error("Ошибка обновления списка документов")
 
     def request_all_files_access(self, *_):
         """Open Android's special all-files access settings when permission is missing."""
@@ -520,7 +538,7 @@ class DocumentLocalApp(MDApp):
         self.config.set("General", "accepted_legal", "1")
         self.config.write()
 
-    def _finish_startup(self, _dt):
+    def _finish_startup(self, _dt=0):
         try:
             if self._has_accepted_legal():
                 try:
