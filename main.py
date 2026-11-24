@@ -164,18 +164,46 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Не удалось открыть настройки Android: " + str(exc)
 
     def refresh_document_list(self):
-        """Do not recursively scan shared storage; use Android's document picker."""
+        """List only office/text documents from shared storage after permission is granted."""
         try:
             container = self.root.ids.documents_list
             container.clear_widgets()
-            hint = MDLabel(
-                text="Недавние документы появятся здесь. Нажмите «Открыть», чтобы выбрать файл.",
-                size_hint_y=None, height="64dp", halign="left", valign="middle")
-            hint.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
-            container.add_widget(hint)
+            if platform != "android":
+                container.add_widget(MDLabel(
+                    text="Выберите документ через кнопку «Открыть».",
+                    size_hint_y=None, height="56dp"))
+                return
+            BuildVersion = autoclass("android.os.Build$VERSION")
+            sdk = int(BuildVersion.SDK_INT)
+            if sdk >= 30:
+                Environment = autoclass("android.os.Environment")
+                if not Environment.isExternalStorageManager():
+                    container.add_widget(MDLabel(
+                        text="Для отображения документов разрешите «Доступ ко всем файлам» в настройках Android.",
+                        size_hint_y=None, height="64dp"))
+                    return
+                root_path = str(Environment.getExternalStorageDirectory().getAbsolutePath())
+            else:
+                root_path = "/storage/emulated/0"
+            if not os.path.isdir(root_path):
+                raise OSError("Общая память недоступна")
+            allowed = (
+                ".doc", ".docx", ".docm", ".odt", ".rtf",
+                ".xls", ".xlsx", ".xlsm", ".ods", ".csv",
+                ".ppt", ".pptx", ".pptm", ".odp",
+                ".pdf", ".txt", ".md", ".html", ".htm"
+            )
+            self._document_scan = {
+                "walk": os.walk(root_path, topdown=True, followlinks=False),
+                "found": [],
+                "allowed": allowed,
+                "container": container,
+            }
+            self.root.ids.status_label.text = "Ищем документы в памяти устройства…"
+            Clock.schedule_once(self._scan_document_batch, 0)
         except Exception as exc:
             try:
-                self.root.ids.status_label.text = "Не удалось обновить список: " + str(exc)
+                self.root.ids.status_label.text = "Не удалось найти документы: " + str(exc)
             except Exception:
                 pass
 
@@ -185,18 +213,17 @@ class DocumentLocalApp(MDApp):
             return
         found = state["found"]
         try:
-            # Process only a small number of directory entries per frame so
-            # the interface remains responsive on phones with large storage.
+            # Scan a limited number of folders per frame to keep scrolling responsive.
             budget = 80
             finished = False
-            while budget > 0 and len(found) < 500:
+            while budget > 0:
                 base, dirs, files = next(state["walk"])
-                dirs[:] = [d for d in dirs if d not in ("Android", ".thumbnails", ".cache")]
+                dirs[:] = [d for d in dirs if d not in (
+                    "Android", ".thumbnails", ".cache", ".Trash", "LOST.DIR"
+                )]
                 for filename in files:
                     if filename.lower().endswith(state["allowed"]):
                         found.append(os.path.join(base, filename))
-                        if len(found) >= 500:
-                            break
                 budget -= 1
         except StopIteration:
             finished = True
@@ -204,7 +231,7 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Ошибка чтения папок: " + str(exc)
             self._document_scan = None
             return
-        finished = finished or len(found) >= 500
+        finished = finished
         if not finished:
             # A completed walk is detected when the iterator is exhausted.
             try:
