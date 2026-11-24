@@ -19,7 +19,7 @@ android.manifest.intent_filters = ./intent_filters.xml
 android.release_artifact = apk
 android.api = 35
 android.minapi = 23
-android.permissions =
+android.permissions = MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
 
