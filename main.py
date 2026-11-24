@@ -65,37 +65,61 @@ class DocumentLocalApp(MDApp):
             self.apply_preferences()
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
-        # Android Storage Access Framework avoids broad permissions and startup scans.
         Clock.schedule_once(self._finish_startup, 0.35)
+        # Ask for shared-storage access after the first screen is displayed.
+        Clock.schedule_once(self.request_all_files_access, 1.2)
         # Keep the branded image visible until the first usable screen is ready.
         Clock.schedule_once(self._hide_splash, 0.9)
         Clock.schedule_once(self._open_shared_file, 0.45)
 
     def request_all_files_access(self, *_):
+        """Request broad shared-storage access where Android supports it."""
         if platform != "android":
             return
         try:
             BuildVersion = autoclass("android.os.Build$VERSION")
             current = autoclass("org.kivy.android.PythonActivity").mActivity
-            if int(BuildVersion.SDK_INT) >= 30:
+            sdk = int(BuildVersion.SDK_INT)
+            if sdk >= 30:
                 Environment = autoclass("android.os.Environment")
                 if not Environment.isExternalStorageManager():
                     Intent = autoclass("android.content.Intent")
                     Uri = autoclass("android.net.Uri")
                     intent = Intent("android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION")
                     intent.setData(Uri.parse("package:" + str(current.getPackageName())))
-                    current.startActivityForResult(intent, 1016)
+                    try:
+                        current.startActivity(intent)
+                    except Exception:
+                        fallback = Intent("android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION")
+                        current.startActivity(fallback)
+                    self.root.ids.status_label.text = (
+                        "Разрешите приложению «Лист» доступ ко всем файлам на экране Android, "
+                        "затем вернитесь в приложение."
+                    )
                 else:
+                    self.root.ids.status_label.text = "Доступ ко всем файлам разрешён."
                     Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.2)
             else:
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
                 permissions = ["android.permission.READ_EXTERNAL_STORAGE",
                                "android.permission.WRITE_EXTERNAL_STORAGE"]
                 current.requestPermissions(permissions, 1017)
         except Exception as exc:
-            self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
+            try:
+                self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
+            except Exception:
+                pass
 
     def on_resume(self):
         try:
+            if platform == "android":
+                BuildVersion = autoclass("android.os.Build$VERSION")
+                if int(BuildVersion.SDK_INT) >= 30:
+                    Environment = autoclass("android.os.Environment")
+                    if Environment.isExternalStorageManager():
+                        self.root.ids.status_label.text = "Доступ ко всем файлам разрешён."
+                else:
+                    self.root.ids.status_label.text = "Проверьте разрешение на чтение хранилища."
             Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.5)
         except Exception:
             pass
