@@ -2,6 +2,8 @@ from kivy.utils import platform
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.clock import Clock
+from kivy.animation import Animation
+import zipfile
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.gridlayout import GridLayout
@@ -64,9 +66,10 @@ class DocumentLocalApp(MDApp):
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
         # Android Storage Access Framework avoids broad permissions and startup scans.
-        Clock.schedule_once(self._finish_startup, 0.2)
-        Clock.schedule_once(self._hide_splash, 0.15)
-        Clock.schedule_once(self._open_shared_file, 0.35)
+        Clock.schedule_once(self._finish_startup, 0.35)
+        # Keep the branded image visible until the first usable screen is ready.
+        Clock.schedule_once(self._hide_splash, 0.9)
+        Clock.schedule_once(self._open_shared_file, 0.45)
 
     def request_all_files_access(self, *_):
         if platform != "android":
@@ -210,6 +213,9 @@ class DocumentLocalApp(MDApp):
             self.current_file_name = os.path.basename(path)
             self.current_file_bytes = data
             self.current_file_format = processor.detect_format(self.current_file_name, "", data)
+            if self.current_file_format in ("docx", "xlsx", "pptx", "odt") and not zipfile.is_zipfile(
+                    io.BytesIO(data)):
+                raise ValueError("Файл повреждён или не является корректным офисным документом.")
             if self.current_file_format == "xlsx":
                 self.show_spreadsheet_editor()
             elif self.current_file_format == "docx":
@@ -260,10 +266,19 @@ class DocumentLocalApp(MDApp):
         try:
             layer = self.root.ids.splash_layer
             parent = layer.parent
-            if parent is not None:
-                parent.remove_widget(layer)
+            if parent is None:
+                return
+            animation = Animation(opacity=0, duration=0.35)
+            animation.bind(on_complete=lambda *_: parent.remove_widget(layer)
+                           if layer.parent is parent else None)
+            animation.start(layer)
         except Exception:
-            pass
+            try:
+                layer = self.root.ids.splash_layer
+                if layer.parent is not None:
+                    layer.parent.remove_widget(layer)
+            except Exception:
+                pass
 
     def _install_exception_hook(self):
         if getattr(self, "_exception_hook_installed", False):
@@ -400,9 +415,38 @@ class DocumentLocalApp(MDApp):
         except Exception:
             pass
 
+    def _legal_acceptance_path(self):
+        return os.path.join(self.user_data_dir, "legal_acceptance_v1.txt")
+
+    def _has_accepted_legal(self):
+        # Keep a private app-data marker in addition to Kivy Config.
+        try:
+            with open(self._legal_acceptance_path(), "r", encoding="utf-8") as marker:
+                if marker.read().strip() == "accepted":
+                    return True
+        except (OSError, AttributeError):
+            pass
+        try:
+            return self.config.get("General", "accepted_legal") == "1"
+        except Exception:
+            return False
+
+    def _persist_legal_acceptance(self):
+        os.makedirs(self.user_data_dir, exist_ok=True)
+        with open(self._legal_acceptance_path(), "w", encoding="utf-8") as marker:
+            marker.write("accepted\\n")
+        self.config.set("General", "accepted_legal", "1")
+        self.config.write()
+
     def _finish_startup(self, _dt):
         try:
-            if self.config.get("General", "accepted_legal") != "1":
+            if self._has_accepted_legal():
+                try:
+                    if not os.path.exists(self._legal_acceptance_path()):
+                        self._persist_legal_acceptance()
+                except Exception:
+                    pass
+            else:
                 self.show_mandatory_consent_dialog()
         except Exception as exc:
             self._write_startup_error("Ошибка первого запуска")
@@ -453,8 +497,11 @@ class DocumentLocalApp(MDApp):
         self.show_legal_doc(filename, title_text)
 
     def accept_legal_agreements(self, instance):
-        self.config.set("General", "accepted_legal", "1")
-        self.config.write()
+        try:
+            self._persist_legal_acceptance()
+        except Exception as exc:
+            self.root.ids.status_label.text = "Не удалось сохранить согласие: " + str(exc)
+            return
         if self.consent_dialog:
             self.consent_dialog.dismiss()
         self.root.ids.status_label.text = "Готово. Выберите документ кнопкой «Открыть»."
@@ -787,6 +834,12 @@ class DocumentLocalApp(MDApp):
             self.current_file_format = DocumentProcessor.detect_format(
                 self.current_file_name, mime_type, self.current_file_bytes
             )
+            if self.current_file_format in ("docx", "xlsx", "pptx", "odt") and not zipfile.is_zipfile(
+                    io.BytesIO(self.current_file_bytes)):
+                raise ValueError(
+                    "Файл имеет офисное расширение, но его содержимое не является корректным "
+                    "DOCX/XLSX/PPTX/ODT. Возможно, передана ссылка или неполная копия."
+                )
             if self.current_file_format == "xlsx":
                 self.show_spreadsheet_editor()
                 self.root.ids.status_label.text = "Открыта таблица: " + self.current_file_name
