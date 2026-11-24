@@ -255,10 +255,19 @@ class DocumentLocalApp(MDApp):
                     uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM)
                 except Exception:
                     uri = None
-            if action in (Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND):
+            elif action == Intent.ACTION_SEND_MULTIPLE:
+                try:
+                    shared_items = incoming.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+                    uri = shared_items.get(0) if shared_items is not None and shared_items.size() else None
+                except Exception:
+                    uri = None
+            if action in (Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND,
+                          Intent.ACTION_SEND_MULTIPLE):
                 if uri is not None:
                     self.current_uri = uri
                     self.process_android_uri(uri)
+            # Do not process the same external file again if Android recreates the activity.
+            current.setIntent(Intent(Intent.ACTION_MAIN))
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось принять файл из другого приложения: " + str(exc)
 
@@ -434,7 +443,7 @@ class DocumentLocalApp(MDApp):
     def _persist_legal_acceptance(self):
         os.makedirs(self.user_data_dir, exist_ok=True)
         with open(self._legal_acceptance_path(), "w", encoding="utf-8") as marker:
-            marker.write("accepted\\n")
+            marker.write("accepted\n")
         self.config.set("General", "accepted_legal", "1")
         self.config.write()
 
