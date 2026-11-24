@@ -76,8 +76,8 @@ class DocumentLocalApp(MDApp):
     def _after_first_frame(self, _dt):
         self._hide_splash()
         self._finish_startup()
-        self._open_shared_file()
-        if platform == "android":
+        opened_external = self._open_shared_file()
+        if platform == "android" and not opened_external:
             self.request_all_files_access()
         self.refresh_document_list()
 
@@ -296,7 +296,7 @@ class DocumentLocalApp(MDApp):
 
     def _open_shared_file(self, *_):
         if platform != "android":
-            return
+            return False
         try:
             current = autoclass("org.kivy.android.PythonActivity").mActivity
             incoming = current.getIntent()
@@ -307,8 +307,10 @@ class DocumentLocalApp(MDApp):
             ):
                 self.process_android_uri(uri)
             current.setIntent(Intent(Intent.ACTION_MAIN))
+            return uri is not None
         except Exception as exc:
             self._show_open_error("Не удалось принять документ: " + str(exc))
+            return False
 
     def on_new_intent(self, intent):
         """Handle a second document delivered to an already running singleTask activity."""
@@ -343,7 +345,7 @@ class DocumentLocalApp(MDApp):
             parent = layer.parent
             if parent is None:
                 return
-            animation = Animation(opacity=0, duration=0.35)
+            animation = Animation(opacity=0, duration=0.12)
             animation.bind(on_complete=lambda *_: parent.remove_widget(layer)
                            if layer.parent is parent else None)
             animation.start(layer)
