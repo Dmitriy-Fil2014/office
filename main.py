@@ -661,10 +661,14 @@ class DocumentLocalApp(MDApp):
             intent.addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
                 | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
             )
             intent.setType("*/*")
             mime_types = [
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/msword",
+                "application/vnd.ms-word.document.12",
+                "application/x-msword",
                 "application/vnd.oasis.opendocument.text",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
