@@ -65,50 +65,54 @@ class DocumentLocalApp(MDApp):
             self.apply_preferences()
         except Exception:
             self._write_startup_error("Ошибка применения настроек при запуске")
-        Clock.schedule_once(self._finish_startup, 0.35)
-        # Ask for shared-storage access after the first screen is displayed.
-        Clock.schedule_once(self.request_all_files_access, 1.2)
-        # Keep the branded image visible until the first usable screen is ready.
-        Clock.schedule_once(self._hide_splash, 0.9)
-        Clock.schedule_once(self._open_shared_file, 0.45)
+        if platform == "android":
+            try:
+                activity.bind(on_new_intent=self.on_new_intent)
+            except Exception:
+                pass
+        # Defer non-essential work to the first event-loop frame; no fixed startup sleeps.
+        Clock.schedule_once(self._after_first_frame, 0)
+
+    def _after_first_frame(self, _dt):
+        self._hide_splash()
+        self._finish_startup()
+        self._open_shared_file()
+        if platform == "android":
+            self.request_all_files_access()
+        self.refresh_document_list()
 
     def request_all_files_access(self, *_):
-        """Request broad shared-storage access where Android supports it."""
+        """Open Android's special all-files access settings when permission is missing."""
         if platform != "android":
             return
         try:
             BuildVersion = autoclass("android.os.Build$VERSION")
             current = autoclass("org.kivy.android.PythonActivity").mActivity
-            sdk = int(BuildVersion.SDK_INT)
-            if sdk >= 30:
+            if int(BuildVersion.SDK_INT) >= 30:
                 Environment = autoclass("android.os.Environment")
                 if not Environment.isExternalStorageManager():
                     Intent = autoclass("android.content.Intent")
                     Uri = autoclass("android.net.Uri")
-                    intent = Intent("android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION")
-                    intent.setData(Uri.parse("package:" + str(current.getPackageName())))
+                    Settings = autoclass("android.provider.Settings")
                     try:
+                        intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                        intent.setData(Uri.parse("package:" + str(current.getPackageName())))
                         current.startActivity(intent)
                     except Exception:
-                        fallback = Intent("android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION")
-                        current.startActivity(fallback)
+                        intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                        current.startActivity(intent)
                     self.root.ids.status_label.text = (
-                        "Разрешите приложению «Лист» доступ ко всем файлам на экране Android, "
-                        "затем вернитесь в приложение."
+                        "Предоставьте «Листу» доступ ко всем файлам в настройках Android "
+                        "или откройте документы через кнопку «Открыть»."
                     )
                 else:
                     self.root.ids.status_label.text = "Доступ ко всем файлам разрешён."
-                    Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.2)
             else:
-                PythonActivity = autoclass("org.kivy.android.PythonActivity")
                 permissions = ["android.permission.READ_EXTERNAL_STORAGE",
                                "android.permission.WRITE_EXTERNAL_STORAGE"]
                 current.requestPermissions(permissions, 1017)
         except Exception as exc:
-            try:
-                self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
-            except Exception:
-                pass
+            self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
 
     def on_resume(self):
         try:
@@ -116,15 +120,21 @@ class DocumentLocalApp(MDApp):
                 BuildVersion = autoclass("android.os.Build$VERSION")
                 if int(BuildVersion.SDK_INT) >= 30:
                     Environment = autoclass("android.os.Environment")
-                    if Environment.isExternalStorageManager():
-                        self.root.ids.status_label.text = "Доступ ко всем файлам разрешён."
+                    allowed = bool(Environment.isExternalStorageManager())
+                    self.root.ids.status_label.text = (
+                        "Доступ ко всем файлам разрешён." if allowed
+                        else "Нет доступа ко всему хранилищу. Можно открыть документ через системный выбор."
+                    )
                 else:
-                    self.root.ids.status_label.text = "Проверьте разрешение на чтение хранилища."
-            Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0.5)
-        except Exception:
-            pass
+                    self.root.ids.status_label.text = "Обновляем список документов…"
+            self.refresh_document_list()
+        except Exception as exc:
+            try:
+                self.root.ids.status_label.text = "Не удалось обновить документы: " + str(exc)
+            except Exception:
+                pass
 
-    def revoke_document_access(self, *_):
+        def revoke_document_access(self, *_):
         """Release all persistable document/folder grants made through Android's picker."""
         if platform != "android":
             return
@@ -164,7 +174,7 @@ class DocumentLocalApp(MDApp):
             self.root.ids.status_label.text = "Не удалось открыть настройки Android: " + str(exc)
 
     def refresh_document_list(self):
-        """List only office/text documents from shared storage after permission is granted."""
+        """Query indexed document files through MediaStore; use SAF when broad access is absent."""
         try:
             container = self.root.ids.documents_list
             container.clear_widgets()
@@ -179,82 +189,57 @@ class DocumentLocalApp(MDApp):
                 Environment = autoclass("android.os.Environment")
                 if not Environment.isExternalStorageManager():
                     container.add_widget(MDLabel(
-                        text="Для отображения документов разрешите «Доступ ко всем файлам» в настройках Android.",
+                        text="Разрешите доступ ко всем файлам или выберите документ кнопкой «Открыть».",
                         size_hint_y=None, height="64dp"))
+                    self.root.ids.status_label.text = "Ожидается разрешение Android или выбор документа."
                     return
-                root_path = str(Environment.getExternalStorageDirectory().getAbsolutePath())
-            else:
-                root_path = "/storage/emulated/0"
-            if not os.path.isdir(root_path):
-                raise OSError("Общая память недоступна")
-            allowed = (
-                ".doc", ".docx", ".docm", ".odt", ".rtf",
-                ".xls", ".xlsx", ".xlsm", ".ods", ".csv",
-                ".ppt", ".pptx", ".pptm", ".odp",
-                ".pdf", ".txt", ".md", ".html", ".htm"
-            )
-            self._document_scan = {
-                "walk": os.walk(root_path, topdown=True, followlinks=False),
-                "found": [],
-                "allowed": allowed,
-                "container": container,
-            }
-            self.root.ids.status_label.text = "Ищем документы в памяти устройства…"
-            Clock.schedule_once(self._scan_document_batch, 0)
+
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            resolver = current.getContentResolver()
+            MediaStore = autoclass("android.provider.MediaStore")
+            ContentUris = autoclass("android.content.ContentUris")
+            collection = MediaStore.Files.getContentUri("external")
+            projection = ["_id", "_display_name", "date_modified", "mime_type"]
+            extensions = (".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf")
+            selection = " OR ".join(["LOWER(_display_name) LIKE ?" for _ in extensions])
+            args = ["%" + ext for ext in extensions]
+            cursor = resolver.query(collection, projection, selection, args, "date_modified DESC")
+            found = []
+            if cursor is not None:
+                try:
+                    id_col = cursor.getColumnIndex("_id")
+                    name_col = cursor.getColumnIndex("_display_name")
+                    date_col = cursor.getColumnIndex("date_modified")
+                    while cursor.moveToNext():
+                        row_id = int(cursor.getLong(id_col))
+                        name = str(cursor.getString(name_col) or "Документ")
+                        modified = int(cursor.getLong(date_col)) if date_col >= 0 else 0
+                        item_uri = ContentUris.withAppendedId(collection, row_id)
+                        found.append((modified, name, item_uri))
+                finally:
+                    cursor.close()
+            found.sort(key=lambda item: item[0], reverse=True)
+            if not found:
+                container.add_widget(MDLabel(
+                    text="Документы не найдены. Попробуйте открыть файл через кнопку «Открыть».",
+                    size_hint_y=None, height="56dp"))
+            for _modified, name, item_uri in found:
+                container.add_widget(MDFillRoundFlatButton(
+                    text=name, size_hint_x=1,
+                    on_release=lambda *_ , selected_uri=item_uri: self.process_android_uri(selected_uri)))
+            self.root.ids.status_label.text = "Недавних документов: " + str(len(found))
         except Exception as exc:
             try:
-                self.root.ids.status_label.text = "Не удалось найти документы: " + str(exc)
+                self.root.ids.status_label.text = "Не удалось получить список документов: " + str(exc)
+                container = self.root.ids.documents_list
+                container.clear_widgets()
+                container.add_widget(MDLabel(
+                    text="Не удалось прочитать список. Откройте документ через системный выбор.",
+                    size_hint_y=None, height="56dp"))
             except Exception:
                 pass
 
-    def _scan_document_batch(self, _dt):
-        state = getattr(self, "_document_scan", None)
-        if not state:
-            return
-        found = state["found"]
-        try:
-            # Scan a limited number of folders per frame to keep scrolling responsive.
-            budget = 80
-            finished = False
-            while budget > 0:
-                base, dirs, files = next(state["walk"])
-                dirs[:] = [d for d in dirs if d not in (
-                    "Android", ".thumbnails", ".cache", ".Trash", "LOST.DIR"
-                )]
-                for filename in files:
-                    if filename.lower().endswith(state["allowed"]):
-                        found.append(os.path.join(base, filename))
-                budget -= 1
-        except StopIteration:
-            finished = True
-        except Exception as exc:
-            self.root.ids.status_label.text = "Ошибка чтения папок: " + str(exc)
-            self._document_scan = None
-            return
-        finished = finished
-        if not finished:
-            # A completed walk is detected when the iterator is exhausted.
-            try:
-                Clock.schedule_once(self._scan_document_batch, 0)
-                return
-            except Exception:
-                pass
-        found.sort(key=lambda path: os.path.basename(path).lower())
-        container = state["container"]
-        container.clear_widgets()
-        for path in found:
-            button = MDFillRoundFlatButton(
-                text=os.path.basename(path), size_hint_x=1,
-                on_release=lambda *_ , selected=path: self.open_local_document(selected))
-            container.add_widget(button)
-        if not found:
-            container.add_widget(MDLabel(
-                text="Документы не найдены. Откройте файл через кнопку «Открыть».",
-                size_hint_y=None, height="56dp"))
-        self.root.ids.status_label.text = "Документов найдено: " + str(len(found))
-        self._document_scan = None
-
-    def open_local_document(self, path):
+        def open_local_document(self, path):
         try:
             processor = self._get_processor()
             with open(path, "rb") as stream:
@@ -292,37 +277,61 @@ class DocumentLocalApp(MDApp):
         except Exception as exc:
             self.root.ids.status_label.text = "Ошибка открытия документа: " + str(exc)
 
-    def _open_shared_file(self, _dt):
+    def _extract_intent_uri(self, incoming):
+        Intent = autoclass("android.content.Intent")
+        action = incoming.getAction()
+        uri = incoming.getData()
+        if action == Intent.ACTION_SEND:
+            uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM)
+        elif action == Intent.ACTION_SEND_MULTIPLE:
+            shared_items = incoming.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
+            uri = shared_items.get(0) if shared_items is not None and shared_items.size() else None
+        return action, uri
+
+    def _open_shared_file(self, *_):
         if platform != "android":
             return
         try:
             current = autoclass("org.kivy.android.PythonActivity").mActivity
             incoming = current.getIntent()
+            action, uri = self._extract_intent_uri(incoming)
             Intent = autoclass("android.content.Intent")
-            action = incoming.getAction()
-            uri = incoming.getData()
-            if action == Intent.ACTION_SEND:
-                try:
-                    uri = incoming.getParcelableExtra(Intent.EXTRA_STREAM)
-                except Exception:
-                    uri = None
-            elif action == Intent.ACTION_SEND_MULTIPLE:
-                try:
-                    shared_items = incoming.getParcelableArrayListExtra(Intent.EXTRA_STREAM)
-                    uri = shared_items.get(0) if shared_items is not None and shared_items.size() else None
-                except Exception:
-                    uri = None
-            if action in (Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND,
-                          Intent.ACTION_SEND_MULTIPLE):
-                if uri is not None:
-                    self.current_uri = uri
-                    self.process_android_uri(uri)
-            # Do not process the same external file again if Android recreates the activity.
+            if uri is not None and action in (
+                Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE
+            ):
+                self.process_android_uri(uri)
             current.setIntent(Intent(Intent.ACTION_MAIN))
         except Exception as exc:
-            self.root.ids.status_label.text = "Не удалось принять файл из другого приложения: " + str(exc)
+            self._show_open_error("Не удалось принять документ: " + str(exc))
 
-    def _hide_splash(self, _dt):
+    def on_new_intent(self, intent):
+        """Handle a second document delivered to an already running singleTask activity."""
+        try:
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            current.setIntent(intent)
+            action, uri = self._extract_intent_uri(intent)
+            Intent = autoclass("android.content.Intent")
+            if uri is not None and action in (
+                Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE
+            ):
+                self.process_android_uri(uri)
+            current.setIntent(Intent(Intent.ACTION_MAIN))
+        except Exception as exc:
+            self._show_open_error("Не удалось открыть переданный документ: " + str(exc))
+
+    def _show_open_error(self, message):
+        try:
+            self.root.ids.status_label.text = message
+            Toast = autoclass("android.widget.Toast")
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            Toast.makeText(current, message, Toast.LENGTH_LONG).show()
+        except Exception:
+            try:
+                self.root.ids.status_label.text = message
+            except Exception:
+                pass
+
+        def _hide_splash(self, *_):
         try:
             layer = self.root.ids.splash_layer
             parent = layer.parent
