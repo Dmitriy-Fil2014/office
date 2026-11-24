@@ -185,16 +185,18 @@ class DocumentLocalApp(MDApp):
                 return
             BuildVersion = autoclass("android.os.Build$VERSION")
             sdk = int(BuildVersion.SDK_INT)
+            broad_access = True
             if sdk >= 30:
                 Environment = autoclass("android.os.Environment")
-                if not Environment.isExternalStorageManager():
-                    container.add_widget(MDLabel(
-                        text="Разрешите доступ ко всем файлам или выберите документ кнопкой «Открыть».",
-                        size_hint_y=None, height="64dp"))
-                    self.root.ids.status_label.text = "Ожидается разрешение Android или выбор документа."
-                    return
-
+                broad_access = bool(Environment.isExternalStorageManager())
             current = autoclass("org.kivy.android.PythonActivity").mActivity
+            if not broad_access and sdk <= 32:
+                # Android 11/12 can still expose permitted indexed files through MediaStore.
+                try:
+                    current.requestPermissions(
+                        ["android.permission.READ_EXTERNAL_STORAGE"], 1018)
+                except Exception:
+                    pass
             resolver = current.getContentResolver()
             MediaStore = autoclass("android.provider.MediaStore")
             ContentUris = autoclass("android.content.ContentUris")
@@ -227,7 +229,11 @@ class DocumentLocalApp(MDApp):
                 container.add_widget(MDFillRoundFlatButton(
                     text=name, size_hint_x=1,
                     on_release=lambda *_ , selected_uri=item_uri: self.process_android_uri(selected_uri)))
-            self.root.ids.status_label.text = "Недавних документов: " + str(len(found))
+            self.root.ids.status_label.text = (
+                "Недавних документов: " + str(len(found)) if broad_access
+                else "Документов в доступной области: " + str(len(found)) +
+                     ". Остальные можно выбрать через «Открыть»."
+            )
         except Exception as exc:
             try:
                 self.root.ids.status_label.text = "Не удалось получить список документов: " + str(exc)
@@ -953,7 +959,7 @@ class DocumentLocalApp(MDApp):
             self._write_startup_error("Ошибка чтения документа")
             self.root.ids.file_content_view.text = ""
             self.root.ids.save_btn.disabled = True
-            self.root.ids.status_label.text = f"Ошибка открытия: {exc}"
+            self._show_open_error("Ошибка открытия: " + str(exc))
 
 
     def show_spreadsheet_editor(self):
