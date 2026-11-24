@@ -68,6 +68,7 @@ class DocumentLocalApp(MDApp):
         if platform == "android":
             try:
                 activity.bind(on_new_intent=self.on_new_intent)
+                activity.bind(on_request_permissions_result=self.on_request_permissions_result)
             except Exception:
                 pass
         # Defer non-essential work to the first event-loop frame; no fixed startup sleeps.
@@ -113,6 +114,10 @@ class DocumentLocalApp(MDApp):
                 current.requestPermissions(permissions, 1017)
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
+
+    def on_request_permissions_result(self, request_code, permissions, grant_results):
+        if request_code in (1017, 1018):
+            Clock.schedule_once(lambda _dt: self.refresh_document_list(), 0)
 
     def on_resume(self):
         try:
@@ -737,7 +742,11 @@ class DocumentLocalApp(MDApp):
                 "application/msword",
                 "application/vnd.ms-word.document.12",
                 "application/x-msword",
+                "application/vnd.ms-excel",
+                "application/vnd.ms-powerpoint",
                 "application/vnd.oasis.opendocument.text",
+                "application/vnd.oasis.opendocument.spreadsheet",
+                "application/vnd.oasis.opendocument.presentation",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 "application/pdf", "application/rtf", "text/rtf",
