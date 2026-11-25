@@ -77,10 +77,8 @@ class DocumentLocalApp(MDApp):
     def _after_first_frame(self, _dt):
         # Keep each startup stage isolated: a permission or intent error must not
         # abort the Kivy event loop and leave the user on the launcher.
-        try:
-            self._hide_splash()
-        except Exception:
-            self._write_startup_error("Ошибка скрытия заставки")
+        # Keep the plain blue loading screen visible briefly, then fade it out.
+        Clock.schedule_once(self._hide_splash, 1.0)
         try:
             self._finish_startup(0)
         except Exception:
@@ -294,10 +292,11 @@ class DocumentLocalApp(MDApp):
             parent = layer.parent
             if parent is None:
                 return
-            animation = Animation(opacity=0, duration=0.12)
+            animation = Animation(opacity=0, duration=0.25)
             animation.bind(on_complete=lambda *_: parent.remove_widget(layer)
                            if layer.parent is parent else None)
-            animation.start(layer)        except Exception:
+            animation.start(layer)
+        except Exception:
             try:
                 layer = self.root.ids.splash_layer
                 if layer.parent is not None:
@@ -485,35 +484,52 @@ class DocumentLocalApp(MDApp):
 
     def show_mandatory_consent_dialog(self):
         en = getattr(self, "language", "ru") == "en"
-        modal = ModalView(size_hint=(0.92, 0.80), auto_dismiss=False,
-                          background_color=(0.02, 0.05, 0.12, 0.65))
-        card = MDCard(orientation="vertical", padding="18dp", spacing="10dp",
-                      radius=[24, 24, 24, 24], elevation=8,
-                      md_bg_color=self.theme_cls.bg_normal)
-        card.add_widget(MDLabel(text="Welcome to Leaf" if en else "Добро пожаловать в «Лист»",
-                                font_style="H6", bold=True, size_hint_y=None, height="44dp"))
-        scroll = ScrollView(do_scroll_x=False)
-        intro = MDLabel(text=("Select a document to open it. Files are processed on your device."
-                              if en else "Выберите документ, чтобы открыть его. Файлы обрабатываются на вашем устройстве."),
-                        size_hint_y=None, halign="left", valign="top")
+        modal = ModalView(size_hint=(0.96, 0.94), auto_dismiss=False,
+                          background_color=(0.01, 0.03, 0.10, 0.82))
+        card = MDCard(orientation="vertical", padding="16dp", spacing="9dp",
+                      radius=[22, 22, 22, 22], elevation=10,
+                      md_bg_color=(0.97, 0.985, 1, 1) if self.theme_cls.theme_style == "Light" else (0.07, 0.10, 0.16, 1))
+        card.add_widget(MDLabel(
+            text="Добро пожаловать в «Лист»" if not en else "Welcome to Leaf",
+            font_style="H6", bold=True, size_hint_y=None, height="42dp",
+            theme_text_color="Custom",
+            text_color=(0.06, 0.12, 0.22, 1) if self.theme_cls.theme_style == "Light" else (1, 1, 1, 1)))
+        intro = MDLabel(
+            text=("Приложение открывает выбранные вами документы и обрабатывает их на устройстве."
+                  if not en else "Leaf opens the documents you choose and processes them on your device."),
+            size_hint_y=None, height="54dp", halign="left", valign="middle",
+            theme_text_color="Custom",
+            text_color=(0.20, 0.27, 0.38, 1) if self.theme_cls.theme_style == "Light" else (0.86, 0.90, 0.97, 1))
         intro.bind(width=lambda w, v: setattr(w, "text_size", (v, None)))
-        intro.bind(texture_size=lambda w, v: setattr(w, "height", v[1] + 12))
-        scroll.add_widget(intro)
-        card.add_widget(scroll)
+        card.add_widget(intro)
+        card.add_widget(MDLabel(
+            text="Документы и соглашения" if not en else "Legal documents",
+            size_hint_y=None, height="28dp", bold=True,
+            theme_text_color="Custom",
+            text_color=(0.06, 0.12, 0.22, 1) if self.theme_cls.theme_style == "Light" else (1, 1, 1, 1)))
         card.add_widget(MDFillRoundFlatButton(
-            text="Прочитать политику конфиденциальности" if not en else "Read privacy policy",
-            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+            text="ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ" if not en else "PRIVACY POLICY",
+            size_hint_x=1, size_hint_y=None, height="52dp",
+            md_bg_color=(0.10, 0.38, 0.82, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: self.show_legal_doc(
                 "privacy_policy.txt", "Политика конфиденциальности" if not en else "Privacy Policy")))
         card.add_widget(MDFillRoundFlatButton(
-            text="Прочитать условия использования" if not en else "Read terms of use",
-            size_hint_x=1, on_release=lambda *_: self.show_legal_doc(
+            text="УСЛОВИЯ ИСПОЛЬЗОВАНИЯ" if not en else "TERMS OF USE",
+            size_hint_x=1, size_hint_y=None, height="52dp",
+            md_bg_color=(0.10, 0.38, 0.82, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: self.show_legal_doc(
                 "terms_of_use.txt", "Условия использования" if not en else "Terms of Use")))
         card.add_widget(MDLabel(
-            text=("Ознакомьтесь с обоими документами перед согласием."
-                  if not en else "Please review both documents before accepting."),
-            theme_text_color="Secondary", size_hint_y=None, height="36dp"))
-        card.add_widget(MDFillRoundFlatButton(text="I AGREE" if en else "СОГЛАСЕН",
-            size_hint_x=1, on_release=self.accept_legal_agreements))
+            text=("Вы можете открыть документы и прочитать их. Чтобы продолжить, нажмите «Согласен и продолжить» — открыть тексты перед этим необязательно."
+                  if not en else "You can open and read the documents. To continue, press “Agree and continue”; opening the texts first is optional."),
+            size_hint_y=None, height="68dp", halign="left", valign="middle",
+            theme_text_color="Custom",
+            text_color=(0.28, 0.34, 0.44, 1) if self.theme_cls.theme_style == "Light" else (0.78, 0.83, 0.91, 1)))
+        card.add_widget(MDFillRoundFlatButton(
+            text="СОГЛАСЕН И ПРОДОЛЖИТЬ" if not en else "AGREE AND CONTINUE",
+            size_hint_x=1, size_hint_y=None, height="56dp",
+            md_bg_color=(0.05, 0.56, 0.34, 1), text_color=(1, 1, 1, 1),
+            on_release=self.accept_legal_agreements))
         modal.add_widget(card)
         self.consent_dialog = modal
         modal.open()
@@ -881,7 +897,8 @@ class DocumentLocalApp(MDApp):
                                   size=("112dp", "42dp"), font_size="14sp")
                 grid.add_widget(field)
                 cells.append(field)
-            self.spreadsheet_cells.append(cells)        scroll.add_widget(grid)
+            self.spreadsheet_cells.append(cells)
+        scroll.add_widget(grid)
         outer.add_widget(scroll)
         self.spreadsheet_grid = grid
         actions = MDBoxLayout(size_hint_y=None, height="50dp", spacing="5dp")
@@ -1180,7 +1197,8 @@ class DocumentLocalApp(MDApp):
         self._resize_word_editor(self.word_editor_input, self.word_editor_input.text)
         content.add_widget(self.word_editor_input)
         try:
-            for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):                try:
+            for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):
+                try:
                     safe_image = processor.normalize_image_bytes(image_bytes)
                     texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
                     preview = KivyImage(texture=texture, size_hint=(1,None),
@@ -1390,41 +1408,50 @@ class DocumentLocalApp(MDApp):
             self.legal_view.dismiss()
 
         modal = ModalView(
-            size_hint=(0.92, 0.84),
+            size_hint=(0.96, 0.92),
             auto_dismiss=True,
-            background_color=(0, 0, 0, 0.55),
+            background_color=(0, 0, 0, 0.78),
         )
+        light = self.theme_cls.theme_style == "Light"
+        foreground = (0.07, 0.11, 0.18, 1) if light else (0.94, 0.96, 1, 1)
         card = MDCard(
             orientation="vertical",
-            padding="18dp",
-            spacing="12dp",
-            radius=[24, 24, 24, 24],
-            elevation=8,
-            md_bg_color=self.theme_cls.bg_normal,
+            padding="16dp",
+            spacing="10dp",
+            radius=[22, 22, 22, 22],
+            elevation=10,
+            md_bg_color=(0.98, 0.99, 1, 1) if light else (0.08, 0.11, 0.18, 1),
         )
         heading = MDLabel(
             text=title_text,
             font_style="H6",
             bold=True,
             size_hint_y=None,
-            height="38dp",
-            theme_text_color="Primary",
+            height="42dp",
+            theme_text_color="Custom",
+            text_color=foreground,
         )
-        scroll = ScrollView(do_scroll_x=False, bar_width="3dp")
+        scroll = ScrollView(do_scroll_x=False, bar_width="4dp")
         body = MDLabel(
             text=self.load_local_text(filename),
             size_hint_y=None,
             halign="left",
             valign="top",
-            theme_text_color="Primary",
-            font_size="14sp",
+            theme_text_color="Custom",
+            text_color=foreground,
+            font_size="15sp",
         )
         body.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
         body.bind(texture_size=lambda widget, size: setattr(widget, "height", size[1] + 12))
         scroll.add_widget(body)
         close_button = MDFillRoundFlatButton(
-            text="ПОНЯТНО",
+            text="ЗАКРЫТЬ",
             pos_hint={"center_x": 0.5},
+            size_hint_x=1,
+            size_hint_y=None,
+            height="48dp",
+            md_bg_color=(0.10, 0.38, 0.82, 1),
+            text_color=(1, 1, 1, 1),
             on_release=lambda *_: modal.dismiss(),
         )
         card.add_widget(heading)
