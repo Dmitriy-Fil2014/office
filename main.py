@@ -297,8 +297,7 @@ class DocumentLocalApp(MDApp):
             animation = Animation(opacity=0, duration=0.12)
             animation.bind(on_complete=lambda *_: parent.remove_widget(layer)
                            if layer.parent is parent else None)
-            animation.start(layer)
-        except Exception:
+            animation.start(layer)        except Exception:
             try:
                 layer = self.root.ids.splash_layer
                 if layer.parent is not None:
@@ -598,7 +597,6 @@ class DocumentLocalApp(MDApp):
             current.startActivityForResult(intent, 1013)
         except Exception as exc:
             self.root.ids.status_label.text = f"Не удалось создать файл: {exc}"
-
     def _write_new_document(self):
         try:
             resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
@@ -630,22 +628,8 @@ class DocumentLocalApp(MDApp):
                 | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
             )
             intent.setType("*/*")
-            mime_types = [
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/msword",
-                "application/vnd.ms-word.document.12",
-                "application/x-msword",
-                "application/vnd.ms-excel",
-                "application/vnd.ms-powerpoint",
-                "application/vnd.oasis.opendocument.text",
-                "application/vnd.oasis.opendocument.spreadsheet",
-                "application/vnd.oasis.opendocument.presentation",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                "application/pdf", "application/rtf", "text/rtf",
-                "text/plain", "text/csv", "text/markdown",
-            ]
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, mime_types)
+            # Show the complete system file list. The app detects supported document
+            # formats after selection instead of hiding other files in the picker.
             activity.bind(on_activity_result=self.on_file_selected)
             current_activity = autoclass(
                 "org.kivy.android.PythonActivity"
@@ -897,8 +881,7 @@ class DocumentLocalApp(MDApp):
                                   size=("112dp", "42dp"), font_size="14sp")
                 grid.add_widget(field)
                 cells.append(field)
-            self.spreadsheet_cells.append(cells)
-        scroll.add_widget(grid)
+            self.spreadsheet_cells.append(cells)        scroll.add_widget(grid)
         outer.add_widget(scroll)
         self.spreadsheet_grid = grid
         actions = MDBoxLayout(size_hint_y=None, height="50dp", spacing="5dp")
@@ -1197,8 +1180,7 @@ class DocumentLocalApp(MDApp):
         self._resize_word_editor(self.word_editor_input, self.word_editor_input.text)
         content.add_widget(self.word_editor_input)
         try:
-            for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):
-                try:
+            for index, image_bytes in enumerate(processor.extract_docx_images(self.current_file_bytes)):                try:
                     safe_image = processor.normalize_image_bytes(image_bytes)
                     texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
                     preview = KivyImage(texture=texture, size_hint=(1,None),
