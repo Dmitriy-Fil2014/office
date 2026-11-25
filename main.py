@@ -105,17 +105,6 @@ class DocumentLocalApp(MDApp):
 
     def on_resume(self):
         try:
-            if platform == "android":
-                BuildVersion = autoclass("android.os.Build$VERSION")
-                if int(BuildVersion.SDK_INT) >= 30:
-                    Environment = autoclass("android.os.Environment")
-                    allowed = bool(Environment.isExternalStorageManager())
-                    self.root.ids.status_label.text = (
-                        "Доступ ко всем файлам разрешён." if allowed
-                        else "Нет доступа ко всему хранилищу. Можно открыть документ через системный выбор."
-                    )
-                else:
-                    self.root.ids.status_label.text = "Обновляем список документов…"
             self.refresh_document_list()
         except Exception as exc:
             try:
@@ -871,11 +860,11 @@ class DocumentLocalApp(MDApp):
             resolver = current_activity.getContentResolver()
             self.current_local_path = None
             self.current_file_name, mime_type = self._get_file_metadata(uri, resolver)
-            self._remember_document(uri, self.current_file_name)
             input_stream = resolver.openInputStream(uri)
             if input_stream is None:
                 raise IOError("Android не смог открыть выбранный файл.")
             self.current_file_bytes = self._read_android_stream(input_stream)
+            self._remember_document(uri, self.current_file_name)
             DocumentProcessor = self._get_processor()
             self.current_file_format = DocumentProcessor.detect_format(
                 self.current_file_name, mime_type, self.current_file_bytes
