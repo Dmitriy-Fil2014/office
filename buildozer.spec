@@ -14,12 +14,11 @@ p4a.branch = v2024.01.21
 # sqlite3 is included with Python; python-for-android supplies hostpython3.
 # lxml 4.9.3 supports Python 3.11 and retains the static build env used by p4a.
 requirements = python3,kivy==2.3.0,kivymd==1.2.0,python-docx,openpyxl,pypdf,python-pptx,lxml==4.9.3,typing_extensions==4.12.2,pillow==10.4.0
-# Request Android all-files access for full MediaStore indexing; SAF remains the scoped-storage fallback.
 android.manifest.intent_filters = ./intent_filters.xml
 android.release_artifact = apk
 android.api = 35
 android.minapi = 23
-android.permissions = MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
+# SAF grants access only to user-selected documents; no shared-storage permissions are required.
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
 
