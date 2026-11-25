@@ -90,48 +90,14 @@ class DocumentLocalApp(MDApp):
             opened_external = bool(self._open_shared_file())
         except Exception:
             self._write_startup_error("Ошибка обработки входящего документа")
-        if platform == "android" and not opened_external:
-            try:
-                self.request_all_files_access()
-            except Exception:
-                self._write_startup_error("Ошибка запроса доступа к хранилищу")
         try:
             self.refresh_document_list()
         except Exception:
             self._write_startup_error("Ошибка обновления списка документов")
 
     def request_all_files_access(self, *_):
-        """Open Android's special all-files access settings when permission is missing."""
-        if platform != "android":
-            return
-        try:
-            BuildVersion = autoclass("android.os.Build$VERSION")
-            current = autoclass("org.kivy.android.PythonActivity").mActivity
-            if int(BuildVersion.SDK_INT) >= 30:
-                Environment = autoclass("android.os.Environment")
-                if not Environment.isExternalStorageManager():
-                    Intent = autoclass("android.content.Intent")
-                    Uri = autoclass("android.net.Uri")
-                    Settings = autoclass("android.provider.Settings")
-                    try:
-                        intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                        intent.setData(Uri.parse("package:" + str(current.getPackageName())))
-                        current.startActivity(intent)
-                    except Exception:
-                        intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-                        current.startActivity(intent)
-                    self.root.ids.status_label.text = (
-                        "Предоставьте «Листу» доступ ко всем файлам в настройках Android "
-                        "или откройте документы через кнопку «Открыть»."
-                    )
-                else:
-                    self.root.ids.status_label.text = "Доступ ко всем файлам разрешён."
-            else:
-                permissions = ["android.permission.READ_EXTERNAL_STORAGE",
-                               "android.permission.WRITE_EXTERNAL_STORAGE"]
-                current.requestPermissions(permissions, 1017)
-        except Exception as exc:
-            self.root.ids.status_label.text = "Не удалось запросить доступ к хранилищу: " + str(exc)
+        """Legacy entry point: use the per-document SAF picker."""
+        self.open_system_storage()
 
     def on_request_permissions_result(self, request_code, permissions, grant_results):
         if request_code in (1017, 1018):
@@ -196,77 +162,48 @@ class DocumentLocalApp(MDApp):
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось открыть настройки Android: " + str(exc)
 
-    def refresh_document_list(self):
-        """Query indexed document files through MediaStore; use SAF when broad access is absent."""
+    def _recent_documents(self):
         try:
-            container = self.root.ids.documents_list
-            container.clear_widgets()
-            if platform != "android":
-                container.add_widget(MDLabel(
-                    text="Выберите документ через кнопку «Открыть».",
-                    size_hint_y=None, height="56dp"))
-                return
-            BuildVersion = autoclass("android.os.Build$VERSION")
-            sdk = int(BuildVersion.SDK_INT)
-            broad_access = True
-            if sdk >= 30:
-                Environment = autoclass("android.os.Environment")
-                broad_access = bool(Environment.isExternalStorageManager())
-            current = autoclass("org.kivy.android.PythonActivity").mActivity
-            if not broad_access and sdk <= 32:
-                # Android 11/12 can still expose permitted indexed files through MediaStore.
-                try:
-                    current.requestPermissions(
-                        ["android.permission.READ_EXTERNAL_STORAGE"], 1018)
-                except Exception:
-                    pass
-            resolver = current.getContentResolver()
-            MediaStore = autoclass("android.provider.MediaStore")
-            ContentUris = autoclass("android.content.ContentUris")
-            collection = MediaStore.Files.getContentUri("external")
-            projection = ["_id", "_display_name", "date_modified", "mime_type"]
-            extensions = (".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".pdf")
-            selection = " OR ".join(["LOWER(_display_name) LIKE ?" for _ in extensions])
-            args = ["%" + ext for ext in extensions]
-            cursor = resolver.query(collection, projection, selection, args, "date_modified DESC")
-            found = []
-            if cursor is not None:
-                try:
-                    id_col = cursor.getColumnIndex("_id")
-                    name_col = cursor.getColumnIndex("_display_name")
-                    date_col = cursor.getColumnIndex("date_modified")
-                    while cursor.moveToNext():
-                        row_id = int(cursor.getLong(id_col))
-                        name = str(cursor.getString(name_col) or "Документ")
-                        modified = int(cursor.getLong(date_col)) if date_col >= 0 else 0
-                        item_uri = ContentUris.withAppendedId(collection, row_id)
-                        found.append((modified, name, item_uri))
-                finally:
-                    cursor.close()
-            found.sort(key=lambda item: item[0], reverse=True)
-            if not found:
-                container.add_widget(MDLabel(
-                    text="Документы не найдены. Попробуйте открыть файл через кнопку «Открыть».",
-                    size_hint_y=None, height="56dp"))
-            for _modified, name, item_uri in found:
-                container.add_widget(MDFillRoundFlatButton(
-                    text=name, size_hint_x=1,
-                    on_release=lambda *_ , selected_uri=item_uri: self.process_android_uri(selected_uri)))
-            self.root.ids.status_label.text = (
-                "Недавних документов: " + str(len(found)) if broad_access
-                else "Документов в доступной области: " + str(len(found)) +
-                     ". Остальные можно выбрать через «Открыть»."
-            )
+            import json
+            value = json.loads(self.config.get("General", "recent_documents", fallback="[]"))
+            return value if isinstance(value, list) else []
+        except Exception:
+            return []
+
+    def _remember_document(self, uri, name):
+        try:
+            import json
+            uri_text = str(uri.toString())
+            items = [x for x in self._recent_documents() if isinstance(x, dict) and x.get("uri") != uri_text]
+            items.insert(0, {"uri": uri_text, "name": str(name), "opened_at": int(__import__("time").time())})
+            self.config.set("General", "recent_documents", json.dumps(items[:30], ensure_ascii=False))
+            self.config.write()
+        except Exception:
+            pass
+
+    def refresh_document_list(self):
+        """Render recent SAF selections without scanning shared storage."""
+        container = self.root.ids.documents_list
+        container.clear_widgets()
+        if platform != "android":
+            container.add_widget(MDLabel(text="Выберите документ через кнопку «Открыть».", size_hint_y=None, height="56dp"))
+            return
+        recent = [x for x in self._recent_documents() if isinstance(x, dict) and x.get("uri")]
+        if not recent:
+            container.add_widget(MDLabel(text="Здесь появятся недавно открытые документы. Нажмите «Открыть», чтобы выбрать файл.", size_hint_y=None, height="72dp"))
+            self.root.ids.status_label.text = "Документы открываются через безопасный системный выбор."
+            return
+        for item in recent:
+            uri_text, name = item["uri"], item.get("name", "Документ")
+            container.add_widget(MDFillRoundFlatButton(text=name, size_hint_x=1, on_release=lambda *_ , saved_uri=uri_text: self._open_recent_uri(saved_uri)))
+        self.root.ids.status_label.text = "Недавних документов: " + str(len(recent))
+
+    def _open_recent_uri(self, uri_text):
+        try:
+            Uri = autoclass("android.net.Uri")
+            self.process_android_uri(Uri.parse(uri_text))
         except Exception as exc:
-            try:
-                self.root.ids.status_label.text = "Не удалось получить список документов: " + str(exc)
-                container = self.root.ids.documents_list
-                container.clear_widgets()
-                container.add_widget(MDLabel(
-                    text="Не удалось прочитать список. Откройте документ через системный выбор.",
-                    size_hint_y=None, height="56dp"))
-            except Exception:
-                pass
+            self._show_open_error("Нет доступа к документу. Откройте его заново через «Открыть». " + str(exc))
 
     def open_local_document(self, path):
         try:
@@ -934,6 +871,7 @@ class DocumentLocalApp(MDApp):
             resolver = current_activity.getContentResolver()
             self.current_local_path = None
             self.current_file_name, mime_type = self._get_file_metadata(uri, resolver)
+            self._remember_document(uri, self.current_file_name)
             input_stream = resolver.openInputStream(uri)
             if input_stream is None:
                 raise IOError("Android не смог открыть выбранный файл.")
