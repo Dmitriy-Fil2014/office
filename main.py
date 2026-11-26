@@ -94,8 +94,33 @@ class DocumentLocalApp(MDApp):
             self._write_startup_error("Ошибка обновления списка документов")
 
     def request_all_files_access(self, *_):
-        """Legacy entry point: use the per-document SAF picker."""
-        self.open_system_storage()
+        """Request Android's all-files special access, then index supported documents."""
+        if platform != "android":
+            self.root.ids.status_label.text = "Полный поиск документов доступен в Android-приложении."
+            return
+        try:
+            Build = autoclass("android.os.Build$VERSION")
+            current = autoclass("org.kivy.android.PythonActivity").mActivity
+            if int(Build.SDK_INT) >= 30:
+                Environment = autoclass("android.os.Environment")
+                if Environment.isExternalStorageManager():
+                    self.refresh_document_list()
+                    return
+                Intent = autoclass("android.content.Intent")
+                Uri = autoclass("android.net.Uri")
+                intent = Intent("android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION")
+                intent.setData(Uri.parse("package:" + str(current.getPackageName())))
+                current.startActivity(intent)
+                self.root.ids.status_label.text = "Разрешите приложению «Лист» доступ ко всем файлам. После возврата документы появятся автоматически."
+            else:
+                from android.permissions import request_permissions, Permission
+                request_permissions(
+                    [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE],
+                    lambda permissions, results: Clock.schedule_once(
+                        lambda _dt: self.refresh_document_list(), 0))
+        except Exception as exc:
+            self._write_startup_error("Ошибка запроса доступа ко всему хранилищу: " + str(exc))
+            self.root.ids.status_label.text = "Не удалось запросить доступ ко всему хранилищу: " + str(exc)
 
     def on_request_permissions_result(self, request_code, permissions, grant_results):
         if request_code in (1017, 1018):
@@ -169,83 +194,87 @@ class DocumentLocalApp(MDApp):
             pass
 
     def refresh_document_list(self):
-        """Show files from the SAF folder explicitly selected by the user, plus recent files."""
+        """Index supported document files across shared storage after all-files access is granted."""
         container = self.root.ids.documents_list
         container.clear_widgets()
         if platform != "android":
             container.add_widget(MDLabel(text="Выберите документ через кнопку «Открыть».", size_hint_y=None, height="56dp"))
             return
 
-        shown = 0
-        saved_tree = self.config.get("General", "documents_tree_uri", fallback="")
-        if saved_tree:
-            try:
-                Uri = autoclass("android.net.Uri")
-                Documents = autoclass("android.provider.DocumentsContract")
-                Document = autoclass("android.provider.DocumentsContract$Document")
-                tree_uri = Uri.parse(saved_tree)
-                document_id = Documents.getTreeDocumentId(tree_uri)
-                children_uri = Documents.buildChildDocumentsUriUsingTree(tree_uri, document_id)
-                resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
-                cursor = resolver.query(children_uri, None, None, None, None)
-                container.add_widget(MDLabel(
-                    text="Файлы в выбранной папке",
-                    size_hint_y=None, height="34dp", bold=True,
-                    theme_text_color="Primary"))
-                if cursor is not None:
-                    try:
-                        id_col = cursor.getColumnIndex(Document.COLUMN_DOCUMENT_ID)
-                        name_col = cursor.getColumnIndex(Document.COLUMN_DISPLAY_NAME)
-                        mime_col = cursor.getColumnIndex(Document.COLUMN_MIME_TYPE)
-                        while cursor.moveToNext():
-                            child_id = str(cursor.getString(id_col))
-                            name = str(cursor.getString(name_col) or "Без названия")
-                            mime = str(cursor.getString(mime_col) or "")
-                            is_dir = mime == Document.MIME_TYPE_DIR
-                            child_uri = Documents.buildDocumentUriUsingTree(tree_uri, child_id)
-                            if is_dir:
-                                callback = lambda *_ , did=child_id: self.show_folder_contents(tree_uri, did)
-                                prefix = "📁 "
-                            else:
-                                callback = lambda *_ , uri=child_uri: self.process_android_uri(uri)
-                                prefix = "📄 "
-                            container.add_widget(MDFillRoundFlatButton(
-                                text=prefix + name, size_hint_x=1,
-                                size_hint_y=None, height="48dp",
-                                on_release=callback))
-                            shown += 1
-                    finally:
-                        cursor.close()
-                if shown == 0:
-                    container.add_widget(MDLabel(
-                        text="В выбранной папке пока нет файлов.",
-                        size_hint_y=None, height="48dp"))
-            except Exception as exc:
-                container.add_widget(MDLabel(
-                    text="Не удалось прочитать выбранную папку. Нажмите «Папка» и выберите её снова.",
-                    size_hint_y=None, height="64dp"))
-                self._write_startup_error("Ошибка чтения выбранной SAF-папки: " + str(exc))
+        has_access = False
+        try:
+            Build = autoclass("android.os.Build$VERSION")
+            if int(Build.SDK_INT) >= 30:
+                has_access = bool(autoclass("android.os.Environment").isExternalStorageManager())
+            else:
+                from android.permissions import check_permission, Permission
+                has_access = bool(check_permission(Permission.READ_EXTERNAL_STORAGE))
+        except Exception as exc:
+            self._write_startup_error("Не удалось проверить доступ к хранилищу: " + str(exc))
 
-        recent = [x for x in self._recent_documents() if isinstance(x, dict) and x.get("uri")]
-        if recent:
+        if not has_access:
             container.add_widget(MDLabel(
-                text="Недавно открытые",
-                size_hint_y=None, height="34dp", bold=True,
-                theme_text_color="Primary"))
-            for item in recent:
-                uri_text, name = item["uri"], item.get("name", "Документ")
-                container.add_widget(MDFillRoundFlatButton(
-                    text=name, size_hint_x=1, size_hint_y=None, height="48dp",
-                    on_release=lambda *_ , saved_uri=uri_text: self._open_recent_uri(saved_uri)))
-        if not shown and not recent:
+                text="Чтобы Лист сам нашёл документы на устройстве, разрешите доступ ко всем файлам.",
+                size_hint_y=None, height="64dp"))
+            container.add_widget(MDFillRoundFlatButton(
+                text="Разрешить доступ ко всем файлам", size_hint_x=1,
+                size_hint_y=None, height="50dp", on_release=self.request_all_files_access))
+            self.root.ids.status_label.text = "Ожидается разрешение на доступ ко всем файлам."
+            return
+
+        extensions = {".docx", ".odt", ".xlsx", ".pptx", ".pdf", ".txt", ".rtf", ".csv", ".md"}
+        excluded = {"Android", ".thumbnails", ".trash", "cache"}
+        roots = []
+        try:
+            Environment = autoclass("android.os.Environment")
+            roots.append(str(Environment.getExternalStorageDirectory().getAbsolutePath()))
+        except Exception:
+            roots.append("/storage/emulated/0")
+
+        found = []
+        seen = set()
+        for root_path in roots:
+            if not os.path.isdir(root_path):
+                continue
+            for current_dir, dirs, files in os.walk(root_path):
+                dirs[:] = [d for d in dirs if d not in excluded and not d.startswith(".")]
+                for filename in files:
+                    if os.path.splitext(filename)[1].lower() not in extensions:
+                        continue
+                    full_path = os.path.join(current_dir, filename)
+                    if full_path in seen:
+                        continue
+                    seen.add(full_path)
+                    found.append(full_path)
+                    if len(found) >= 1500:
+                        break
+                if len(found) >= 1500:
+                    break
+            if len(found) >= 1500:
+                break
+
+        found.sort(key=lambda path: (os.path.basename(path).lower(), path.lower()))
+        container.add_widget(MDLabel(
+            text="Найденные документы (" + str(len(found)) + ")",
+            size_hint_y=None, height="36dp", bold=True, theme_text_color="Primary"))
+        for path in found:
+            relative = path
+            for root_path in roots:
+                if path.startswith(root_path):
+                    relative = path[len(root_path):].lstrip(os.sep)
+                    break
+            container.add_widget(MDFillRoundFlatButton(
+                text="📄 " + relative, size_hint_x=1,
+                size_hint_y=None, height="48dp",
+                on_release=lambda *_ , file_path=path: self.open_local_document(file_path)))
+        if not found:
             container.add_widget(MDLabel(
-                text="Нажмите «Папка», чтобы выбрать папку с документами, или «Открыть», чтобы выбрать один файл.",
-                size_hint_y=None, height="72dp"))
+                text="Документы поддерживаемых форматов не найдены. Проверьте папки Downloads и Documents.",
+                size_hint_y=None, height="64dp"))
         self.root.ids.status_label.text = (
-            "Файлов в выбранной папке: " + str(shown)
-            if saved_tree else "Выберите папку с документами или откройте отдельный файл через SAF."
-        )
-
+            "Найдено документов: " + str(len(found)) +
+            (" (показаны первые 1500)." if len(found) >= 1500 else ""))
+        
     def _open_recent_uri(self, uri_text):
         try:
             Uri = autoclass("android.net.Uri")
@@ -611,19 +640,17 @@ class DocumentLocalApp(MDApp):
         self._maybe_request_initial_folder_access()
 
     def _maybe_request_initial_folder_access(self):
-        """Ask once for a user-selected SAF folder so its documents can populate the home screen."""
+        """Request broad document indexing access once, without asking the user to browse folders."""
         if platform != "android":
             return
         try:
-            if self.config.get("General", "documents_tree_uri", fallback=""):
-                return
             if self.config.get("General", "file_access_prompted", fallback="0") == "1":
                 return
             self.config.set("General", "file_access_prompted", "1")
             self.config.write()
-            Clock.schedule_once(lambda _dt: self.request_folder_access(), 0.6)
+            Clock.schedule_once(lambda _dt: self.request_all_files_access(), 0.6)
         except Exception as exc:
-            self._write_startup_error("Не удалось запросить первоначальный доступ к папке: " + str(exc))
+            self._write_startup_error("Не удалось запросить доступ ко всему хранилищу: " + str(exc))
 
     def show_new_document_menu(self):
         en = getattr(self, "language", "ru") == "en"
