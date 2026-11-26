@@ -169,21 +169,82 @@ class DocumentLocalApp(MDApp):
             pass
 
     def refresh_document_list(self):
-        """Render recent SAF selections without scanning shared storage."""
+        """Show files from the SAF folder explicitly selected by the user, plus recent files."""
         container = self.root.ids.documents_list
         container.clear_widgets()
         if platform != "android":
             container.add_widget(MDLabel(text="Выберите документ через кнопку «Открыть».", size_hint_y=None, height="56dp"))
             return
+
+        shown = 0
+        saved_tree = self.config.get("General", "documents_tree_uri", fallback="")
+        if saved_tree:
+            try:
+                Uri = autoclass("android.net.Uri")
+                Documents = autoclass("android.provider.DocumentsContract")
+                Document = autoclass("android.provider.DocumentsContract$Document")
+                tree_uri = Uri.parse(saved_tree)
+                document_id = Documents.getTreeDocumentId(tree_uri)
+                children_uri = Documents.buildChildDocumentsUriUsingTree(tree_uri, document_id)
+                resolver = autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver()
+                cursor = resolver.query(children_uri, None, None, None, None)
+                container.add_widget(MDLabel(
+                    text="Файлы в выбранной папке",
+                    size_hint_y=None, height="34dp", bold=True,
+                    theme_text_color="Primary"))
+                if cursor is not None:
+                    try:
+                        id_col = cursor.getColumnIndex(Document.COLUMN_DOCUMENT_ID)
+                        name_col = cursor.getColumnIndex(Document.COLUMN_DISPLAY_NAME)
+                        mime_col = cursor.getColumnIndex(Document.COLUMN_MIME_TYPE)
+                        while cursor.moveToNext():
+                            child_id = str(cursor.getString(id_col))
+                            name = str(cursor.getString(name_col) or "Без названия")
+                            mime = str(cursor.getString(mime_col) or "")
+                            is_dir = mime == Document.MIME_TYPE_DIR
+                            child_uri = Documents.buildDocumentUriUsingTree(tree_uri, child_id)
+                            if is_dir:
+                                callback = lambda *_ , did=child_id: self.show_folder_contents(tree_uri, did)
+                                prefix = "📁 "
+                            else:
+                                callback = lambda *_ , uri=child_uri: self.process_android_uri(uri)
+                                prefix = "📄 "
+                            container.add_widget(MDFillRoundFlatButton(
+                                text=prefix + name, size_hint_x=1,
+                                size_hint_y=None, height="48dp",
+                                on_release=callback))
+                            shown += 1
+                    finally:
+                        cursor.close()
+                if shown == 0:
+                    container.add_widget(MDLabel(
+                        text="В выбранной папке пока нет файлов.",
+                        size_hint_y=None, height="48dp"))
+            except Exception as exc:
+                container.add_widget(MDLabel(
+                    text="Не удалось прочитать выбранную папку. Нажмите «Папка» и выберите её снова.",
+                    size_hint_y=None, height="64dp"))
+                self._write_startup_error("Ошибка чтения выбранной SAF-папки: " + str(exc))
+
         recent = [x for x in self._recent_documents() if isinstance(x, dict) and x.get("uri")]
-        if not recent:
-            container.add_widget(MDLabel(text="Здесь появятся недавно открытые документы. Нажмите «Открыть», чтобы выбрать файл.", size_hint_y=None, height="72dp"))
-            self.root.ids.status_label.text = "Документы открываются через безопасный системный выбор."
-            return
-        for item in recent:
-            uri_text, name = item["uri"], item.get("name", "Документ")
-            container.add_widget(MDFillRoundFlatButton(text=name, size_hint_x=1, on_release=lambda *_ , saved_uri=uri_text: self._open_recent_uri(saved_uri)))
-        self.root.ids.status_label.text = "Недавних документов: " + str(len(recent))
+        if recent:
+            container.add_widget(MDLabel(
+                text="Недавно открытые",
+                size_hint_y=None, height="34dp", bold=True,
+                theme_text_color="Primary"))
+            for item in recent:
+                uri_text, name = item["uri"], item.get("name", "Документ")
+                container.add_widget(MDFillRoundFlatButton(
+                    text=name, size_hint_x=1, size_hint_y=None, height="48dp",
+                    on_release=lambda *_ , saved_uri=uri_text: self._open_recent_uri(saved_uri)))
+        if not shown and not recent:
+            container.add_widget(MDLabel(
+                text="Нажмите «Папка», чтобы выбрать папку с документами, или «Открыть», чтобы выбрать один файл.",
+                size_hint_y=None, height="72dp"))
+        self.root.ids.status_label.text = (
+            "Файлов в выбранной папке: " + str(shown)
+            if saved_tree else "Выберите папку с документами или откройте отдельный файл через SAF."
+        )
 
     def _open_recent_uri(self, uri_text):
         try:
@@ -675,9 +736,12 @@ class DocumentLocalApp(MDApp):
                     )
                     autoclass("org.kivy.android.PythonActivity").mActivity.getContentResolver().takePersistableUriPermission(
                         self.tree_uri, flags)
-                except Exception:
-                    pass
-                self.show_folder_contents(self.tree_uri)
+                    self.config.set("General", "documents_tree_uri", str(self.tree_uri.toString()))
+                    self.config.write()
+                except Exception as exc:
+                    self._write_startup_error("Не удалось сохранить доступ к папке SAF: " + str(exc))
+                self.refresh_document_list()
+                self.root.ids.status_label.text = "Доступ к папке сохранён. Её документы отображаются на главном экране."
                 return
             if request_code == 1013:
                 self._write_new_document()
