@@ -18,7 +18,8 @@ android.manifest.intent_filters = ./intent_filters.xml
 android.release_artifact = apk
 android.api = 35
 android.minapi = 23
-# SAF grants access only to user-selected documents; no shared-storage permissions are required.
+# Android all-files access is used only to index supported documents locally.
+android.permissions = MANAGE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
 
