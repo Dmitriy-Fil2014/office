@@ -201,6 +201,68 @@ class DocumentProcessor:
         return "\n".join(paragraph.text for paragraph in paragraphs)
 
     @staticmethod
+    def read_word_view_model(file_bytes):
+        """Return ordered DOCX paragraphs, tables, and inline images for the reader UI."""
+        from docx import Document
+        from docx.text.paragraph import Paragraph
+        from docx.table import Table
+        from docx.oxml.ns import qn
+        document = Document(io.BytesIO(file_bytes))
+        blocks = []
+        for child in document.element.body.iterchildren():
+            if child.tag.endswith("}p"):
+                paragraph = Paragraph(child, document)
+                value = paragraph.text.strip()
+                if value:
+                    style_name = getattr(paragraph.style, "name", "") or ""
+                    blocks.append({"type": "paragraph", "text": value, "style": style_name})
+                try:
+                    for blip in child.xpath(".//a:blip"):
+                        relationship_id = blip.get(qn("r:embed"))
+                        part = paragraph.part.related_parts.get(relationship_id)
+                        if part is not None:
+                            blocks.append({"type": "image", "data": part.blob})
+                except Exception:
+                    pass
+            elif child.tag.endswith("}tbl"):
+                table = Table(child, document)
+                rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+                if rows:
+                    blocks.append({"type": "table", "rows": rows})
+        # Headers and footers are shown after the main body to avoid losing them.
+        for section in document.sections:
+            for label, container in (("Колонтитул", section.header),
+                                     ("Нижний колонтитул", section.footer)):
+                values = [p.text.strip() for p in container.paragraphs if p.text.strip()]
+                if values:
+                    blocks.append({"type": "section", "title": label, "text": "\\n".join(values)})
+        return blocks
+
+    @staticmethod
+    def read_excel_view_model(file_bytes):
+        """Read all workbook sheets for a bounded, read-only spreadsheet preview."""
+        from openpyxl import load_workbook
+        if not zipfile.is_zipfile(io.BytesIO(file_bytes)):
+            raise ValueError("Файл XLSX повреждён или имеет неверный формат.")
+        workbook = load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+        try:
+            result = []
+            for sheet in workbook.worksheets:
+                rows = []
+                for row_index, row in enumerate(sheet.iter_rows(min_row=1, max_row=80,
+                                                                  min_col=1, max_col=16,
+                                                                  values_only=True), start=1):
+                    values = ["" if value is None else str(value) for value in row]
+                    while values and values[-1] == "":
+                        values.pop()
+                    if values:
+                        rows.append(values)
+                result.append({"name": sheet.title, "rows": rows})
+            return result
+        finally:
+            workbook.close()
+
+    @staticmethod
     def extract_docx_images(file_bytes):
         with zipfile.ZipFile(io.BytesIO(file_bytes)) as package:
             return [package.read(name) for name in sorted(package.namelist())
