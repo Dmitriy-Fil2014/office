@@ -531,6 +531,7 @@ class DocumentLocalApp(MDApp):
                         self._persist_legal_acceptance()
                 except Exception:
                     pass
+                self._maybe_request_initial_folder_access()
             else:
                 self.show_mandatory_consent_dialog()
         except Exception as exc:
@@ -606,7 +607,23 @@ class DocumentLocalApp(MDApp):
             return
         if self.consent_dialog:
             self.consent_dialog.dismiss()
-        self.root.ids.status_label.text = "Готово. Выберите документ кнопкой «Открыть»."
+        self.root.ids.status_label.text = "Выберите папку с документами в системном окне Android."
+        self._maybe_request_initial_folder_access()
+
+    def _maybe_request_initial_folder_access(self):
+        """Ask once for a user-selected SAF folder so its documents can populate the home screen."""
+        if platform != "android":
+            return
+        try:
+            if self.config.get("General", "documents_tree_uri", fallback=""):
+                return
+            if self.config.get("General", "file_access_prompted", fallback="0") == "1":
+                return
+            self.config.set("General", "file_access_prompted", "1")
+            self.config.write()
+            Clock.schedule_once(lambda _dt: self.request_folder_access(), 0.6)
+        except Exception as exc:
+            self._write_startup_error("Не удалось запросить первоначальный доступ к папке: " + str(exc))
 
     def show_new_document_menu(self):
         en = getattr(self, "language", "ru") == "en"
