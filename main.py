@@ -942,10 +942,19 @@ class DocumentLocalApp(MDApp):
                 "Редактирование выполняется локально."
             )
         except Exception as exc:
-            self._write_startup_error("Ошибка чтения документа")
-            self.root.ids.file_content_view.text = ""
-            self.root.ids.save_btn.disabled = True
-            self._show_open_error("Ошибка открытия: " + str(exc))
+            self._write_startup_error(
+                "Ошибка чтения документа " + str(getattr(self, "current_file_name", "")) +
+                ": " + repr(exc)
+            )
+            try:
+                self.root.ids.file_content_view.text = ""
+                self.root.ids.save_btn.disabled = True
+            except Exception:
+                pass
+            self._show_open_error(
+                "Не удалось открыть «" + str(getattr(self, "current_file_name", "документ")) +
+                "»: " + str(exc)
+            )
 
 
     def show_spreadsheet_editor(self):
@@ -988,6 +997,7 @@ class DocumentLocalApp(MDApp):
         actions.add_widget(MDFillRoundFlatButton(text="Сохранить", on_release=lambda *_: (modal.dismiss(), self.save_changes_to_storage())))
         actions.add_widget(MDFillRoundFlatButton(text="Закрыть", on_release=lambda *_: modal.dismiss()))
         outer.add_widget(actions)
+        outer.add_widget(self._editor_close_button())
         modal.add_widget(outer)
         self.spreadsheet_view = modal
         modal.open()
@@ -1151,6 +1161,49 @@ class DocumentLocalApp(MDApp):
     def _editor_modal_size(self):
         return (0.94, 0.92) if self.editor_view_mode() == "desktop" else (1, 1)
 
+    def close_current_document(self, *_):
+        """Close the active document without saving any pending edits."""
+        for attr in (
+            "word_editor_modal", "spreadsheet_view", "presentation_editor",
+            "fullscreen_editor", "image_viewer_modal",
+        ):
+            modal = getattr(self, attr, None)
+            if modal is not None:
+                try:
+                    if modal.parent is not None:
+                        modal.dismiss()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+        self.word_editor_input = None
+        self.fullscreen_text_input = None
+        self.spreadsheet_cells = []
+        self.spreadsheet_grid = None
+        self.current_file_bytes = b""
+        self.current_file_name = ""
+        self.current_file_format = ""
+        self.current_uri = None
+        self.current_local_path = None
+        self.pending_create_bytes = None
+        try:
+            self.root.ids.file_content_view.text = ""
+            self.root.ids.save_btn.disabled = True
+            self.refresh_document_list()
+            self.root.ids.status_label.text = "Документ закрыт без сохранения."
+        except Exception:
+            pass
+
+    def _editor_close_button(self):
+        return MDFillRoundFlatButton(
+            text="Закрыть без сохранения",
+            size_hint_x=1,
+            size_hint_y=None,
+            height="48dp",
+            md_bg_color=(0.72, 0.12, 0.16, 1),
+            text_color=(1, 1, 1, 1),
+            on_release=self.close_current_document,
+        )
+
     def _make_editor_modal(self):
         return ModalView(size_hint=self._editor_modal_size(), auto_dismiss=False,
                          background_color=(0.02, 0.04, 0.08, 0.94),
@@ -1223,6 +1276,7 @@ class DocumentLocalApp(MDApp):
         viewer = KivyImage(texture=texture, size_hint=(1, 1),
                            allow_stretch=True, keep_ratio=True)
         outer.add_widget(viewer)
+        outer.add_widget(self._editor_close_button())
         modal.add_widget(outer)
         self.image_viewer_modal = modal
         modal.open()
@@ -1246,6 +1300,7 @@ class DocumentLocalApp(MDApp):
                            keyboard_mode="managed")
         outer.add_widget(header)
         outer.add_widget(editor)
+        outer.add_widget(self._editor_close_button())
         modal.add_widget(outer)
         self.fullscreen_editor = modal
         self.fullscreen_text_input = editor
@@ -1292,6 +1347,7 @@ class DocumentLocalApp(MDApp):
             pass
         scroll.add_widget(content)
         outer.add_widget(scroll)
+        outer.add_widget(self._editor_close_button())
         modal.add_widget(outer)
         self.word_editor_modal = modal
         modal.open()
@@ -1373,6 +1429,7 @@ class DocumentLocalApp(MDApp):
             listing.add_widget(card)
         scroll.add_widget(listing)
         outer.add_widget(scroll)
+        outer.add_widget(self._editor_close_button())
         modal.add_widget(outer)
         self.presentation_editor = modal
         modal.open()
