@@ -350,10 +350,30 @@ class DocumentProcessor:
 
     @staticmethod
     def add_image_to_pptx(old_bytes, image_bytes):
+        """Embed a normalized picture on the last slide, centered and fully visible."""
         from pptx import Presentation
+        from pptx.util import Inches
+        from PIL import Image
         presentation = Presentation(io.BytesIO(old_bytes))
         slide = presentation.slides[-1] if presentation.slides else presentation.slides.add_slide(presentation.slide_layouts[6])
-        slide.shapes.add_picture(io.BytesIO(image_bytes), 914400, 914400, width=5486400)
+
+        # python-pptx accepts PNG/JPEG, while Android pickers commonly return
+        # WEBP, HEIC, TIFF, or images with EXIF rotation. Normalize first.
+        normalized = DocumentProcessor.normalize_image_bytes(image_bytes)
+        with Image.open(io.BytesIO(normalized)) as image:
+            image_width, image_height = image.size
+        slide_width = int(presentation.slide_width)
+        slide_height = int(presentation.slide_height)
+        margin = Inches(0.45)
+        max_width = max(1, slide_width - 2 * margin)
+        max_height = max(1, slide_height - 2 * margin)
+        scale = min(max_width / float(image_width), max_height / float(image_height))
+        width = max(1, int(image_width * scale))
+        height = max(1, int(image_height * scale))
+        left = int((slide_width - width) / 2)
+        top = int((slide_height - height) / 2)
+        slide.shapes.add_picture(io.BytesIO(normalized), left, top,
+                                 width=width, height=height)
         output = io.BytesIO()
         presentation.save(output)
         return output.getvalue()
