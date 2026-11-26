@@ -307,10 +307,13 @@ class DocumentLocalApp(MDApp):
             elif self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
                 self.show_presentation_editor()
+            elif self.current_file_format == "pdf":
+                self.root.ids.save_btn.disabled = True
+                self.show_pdf_viewer()
             elif self.current_file_format == "image":
                 self.show_image_viewer()
             else:
-                readers = {"txt": processor.read_txt_bytes, "pdf": processor.read_pdf_bytes,
+                readers = {"txt": processor.read_txt_bytes,
                            "rtf": processor.read_txt_bytes, "csv": processor.read_txt_bytes,
                            "md": processor.read_txt_bytes}
                 self.root.ids.file_content_view.text = readers[self.current_file_format](data)
@@ -953,13 +956,18 @@ class DocumentLocalApp(MDApp):
                 self.show_presentation_editor()
                 self.root.ids.status_label.text = "Открыта презентация: " + self.current_file_name
                 return
+            if self.current_file_format == "pdf":
+                self.root.ids.save_btn.disabled = True
+                self.show_pdf_viewer()
+                self.root.ids.status_label.text = "Открыт PDF: " + self.current_file_name
+                return
             if self.current_file_format == "image":
                 self.show_image_viewer()
                 self.root.ids.save_btn.disabled = True
                 self.root.ids.status_label.text = "Открыто изображение: " + self.current_file_name
                 return
 
-            readers = {"txt": DocumentProcessor.read_txt_bytes, "pdf": DocumentProcessor.read_pdf_bytes, "rtf": DocumentProcessor.read_txt_bytes, "csv": DocumentProcessor.read_txt_bytes, "md": DocumentProcessor.read_txt_bytes}
+            readers = {"txt": DocumentProcessor.read_txt_bytes, "rtf": DocumentProcessor.read_txt_bytes, "csv": DocumentProcessor.read_txt_bytes, "md": DocumentProcessor.read_txt_bytes}
             text = readers[self.current_file_format](self.current_file_bytes)
             self.root.ids.file_content_view.text = text
             self.root.ids.save_btn.disabled = False
@@ -1171,14 +1179,24 @@ class DocumentLocalApp(MDApp):
             if not data:
                 raise ValueError("Выбранное изображение пустое или недоступно.")
             processor = self._get_processor()
-            if self.current_file_format == "pptx":
-                self.current_file_bytes = processor.add_image_to_pptx(self.current_file_bytes, data)
-            else:
-                self.current_file_bytes = processor.add_image_to_docx(self.current_file_bytes, data)
-            self.root.ids.status_label.text = "Изображение добавлено. Нажмите «Сохранить»."
-            if self.current_file_format == "pptx" and getattr(self, "presentation_editor", None):
-                self.presentation_editor.dismiss()
-                Clock.schedule_once(lambda _dt: self.show_presentation_editor(), 0.15)
+            original_format = self.current_file_format
+            updated_bytes = (processor.add_image_to_pptx(self.current_file_bytes, data)
+                             if original_format == "pptx"
+                             else processor.add_image_to_docx(self.current_file_bytes, data))
+            if not zipfile.is_zipfile(io.BytesIO(updated_bytes)):
+                raise ValueError("Не удалось сформировать корректный документ с изображением.")
+            self.current_file_bytes = updated_bytes
+            self.root.ids.status_label.text = (
+                "Картинка встроена в презентацию на последний слайд. "
+                "Нажмите «Сохранить», чтобы записать её в файл."
+                if original_format == "pptx"
+                else "Картинка встроена в документ Word. Нажмите «Сохранить»."
+            )
+            if original_format == "pptx":
+                old_modal = getattr(self, "presentation_editor", None)
+                if old_modal is not None:
+                    old_modal.dismiss()
+                Clock.schedule_once(lambda _dt: self.show_presentation_editor(), 0.2)
         except Exception as exc:
             self.root.ids.status_label.text = "Не удалось вставить изображение: " + str(exc)
 
@@ -1192,7 +1210,7 @@ class DocumentLocalApp(MDApp):
         """Close the active document without saving any pending edits."""
         for attr in (
             "word_editor_modal", "spreadsheet_view", "presentation_editor",
-            "fullscreen_editor", "image_viewer_modal",
+            "fullscreen_editor", "image_viewer_modal", "pdf_viewer_modal",
         ):
             modal = getattr(self, attr, None)
             if modal is not None:
@@ -1280,6 +1298,86 @@ class DocumentLocalApp(MDApp):
 
     def apply_word_highlight(self):
         self._editor_selection_wrap("[highlight=#FFF176]", "[/highlight]")
+
+    def show_pdf_viewer(self):
+        """Render PDF pages with Android PdfRenderer in a polished vertical reader."""
+        if platform != "android":
+            self.show_fullscreen_text_editor(self._get_processor().read_pdf_bytes(self.current_file_bytes))
+            return
+        from kivy.metrics import dp
+        File = autoclass("java.io.File")
+        ParcelFileDescriptor = autoclass("android.os.ParcelFileDescriptor")
+        PdfRenderer = autoclass("android.graphics.pdf.PdfRenderer")
+        Bitmap = autoclass("android.graphics.Bitmap")
+        BitmapConfig = autoclass("android.graphics.Bitmap$Config")
+        BitmapCompress = autoclass("android.graphics.Bitmap$CompressFormat")
+        Canvas = autoclass("android.graphics.Canvas")
+        Color = autoclass("android.graphics.Color")
+        FileOutputStream = autoclass("java.io.FileOutputStream")
+        render_dir = os.path.join(self.user_data_dir, "pdf_pages")
+        os.makedirs(render_dir, exist_ok=True)
+        pdf_path = os.path.join(self.user_data_dir, "current_document.pdf")
+        with open(pdf_path, "wb") as stream:
+            stream.write(self.current_file_bytes)
+        descriptor = ParcelFileDescriptor.open(File(pdf_path), ParcelFileDescriptor.MODE_READ_ONLY)
+        renderer = PdfRenderer(descriptor)
+        modal = ModalView(size_hint=(1, 1), auto_dismiss=False,
+                          background_color=(0.035, 0.045, 0.065, 1))
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        header = MDBoxLayout(size_hint_y=None, height="54dp", spacing="8dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "PDF-документ",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDLabel(text=str(renderer.getPageCount()) + " стр.",
+                                  size_hint_x=None, width="62dp", halign="right"))
+        header.add_widget(MDFillRoundFlatButton(
+            text="Закрыть", size_hint_x=None, width="92dp",
+            on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width="4dp")
+        pages = MDBoxLayout(orientation="vertical", size_hint_y=None,
+                            spacing="14dp", padding=("2dp", "4dp"))
+        pages.bind(minimum_height=pages.setter("height"))
+        page_paths = []
+        try:
+            for index in range(renderer.getPageCount()):
+                page = renderer.openPage(index)
+                page_width, page_height = int(page.getWidth()), int(page.getHeight())
+                scale = min(1400.0 / max(1, page_width), 1.0)
+                bitmap_width = max(1, int(page_width * scale))
+                bitmap_height = max(1, int(page_height * scale))
+                bitmap = Bitmap.createBitmap(bitmap_width, bitmap_height, BitmapConfig.ARGB_8888)
+                Canvas(bitmap).drawColor(Color.WHITE)
+                page.render(bitmap, None, None, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.close()
+                page_path = os.path.join(render_dir, "page_" + str(index + 1) + ".png")
+                output = FileOutputStream(page_path)
+                try:
+                    bitmap.compress(BitmapCompress.PNG, 100, output)
+                    output.flush()
+                finally:
+                    output.close()
+                    bitmap.recycle()
+                page_paths.append(page_path)
+                card = MDCard(orientation="vertical", size_hint_y=None,
+                              height=dp(bitmap_height + 36), padding="8dp",
+                              spacing="5dp", radius=[10, 10, 10, 10],
+                              md_bg_color=(1, 1, 1, 1), elevation=2)
+                card.add_widget(MDLabel(text="Страница " + str(index + 1),
+                    size_hint_y=None, height="26dp", halign="center",
+                    theme_text_color="Custom", text_color=(0.25, 0.3, 0.38, 1)))
+                card.add_widget(KivyImage(source=page_path, size_hint=(1, None),
+                    height=dp(bitmap_height), allow_stretch=True, keep_ratio=True))
+                pages.add_widget(card)
+            scroll.add_widget(pages)
+            outer.add_widget(scroll)
+            outer.add_widget(self._editor_close_button())
+            modal.add_widget(outer)
+            self.pdf_viewer_modal = modal
+            self.pdf_render_paths = page_paths
+            modal.open()
+        finally:
+            renderer.close()
+            descriptor.close()
 
     def show_image_viewer(self):
         """Open raster images in a black, edge-to-edge viewer."""
