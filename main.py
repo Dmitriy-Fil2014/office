@@ -1484,8 +1484,6 @@ class DocumentLocalApp(MDApp):
                             halign="left", valign="middle", padding=("6dp", "3dp"),
                             theme_text_color="Custom",
                             text_color=(0.12, 0.16, 0.22, 1))
-                        cell.md_bg_color = ((0.88, 0.92, 0.97, 1) if row_index == 0
-                                            else (0.97, 0.98, 0.99, 1))
                         grid.add_widget(cell)
                 page.add_widget(grid)
             elif kind == "image":
@@ -1551,12 +1549,12 @@ class DocumentLocalApp(MDApp):
                     theme_text_color="Custom", text_color=(0.08, 0.12, 0.18, 1))
                 label.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
                 card.add_widget(label)
-            for image_bytes in slide.get("images", [])[:4]:
+            for image_bytes in slide.get("images", [])[:2]:
                 try:
                     safe_image = processor.normalize_image_bytes(image_bytes)
                     texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
                     card.add_widget(KivyImage(texture=texture, size_hint=(1, None),
-                        height="170dp", allow_stretch=True, keep_ratio=True))
+                        height="130dp", allow_stretch=True, keep_ratio=True))
                 except Exception:
                     continue
             if not text_value and not slide.get("images"):
@@ -1610,8 +1608,6 @@ class DocumentLocalApp(MDApp):
                         size=("112dp", "40dp"), halign="left", valign="middle",
                         padding=("6dp", "2dp"), theme_text_color="Custom",
                         text_color=(0.10, 0.15, 0.20, 1))
-                    cell.md_bg_color = ((0.86, 0.93, 0.88, 1) if row_index == 0
-                                        else (0.97, 0.98, 0.97, 1))
                     grid.add_widget(cell)
             horizontal = ScrollView(do_scroll_x=True, do_scroll_y=False,
                                     size_hint=(1, None), height=min(360, max(80, len(rows) * 40 + 4)))
