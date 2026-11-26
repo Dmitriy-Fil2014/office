@@ -1170,8 +1170,7 @@ class DocumentLocalApp(MDApp):
             modal = getattr(self, attr, None)
             if modal is not None:
                 try:
-                    if modal.parent is not None:
-                        modal.dismiss()
+                    modal.dismiss()
                 except Exception:
                     pass
                 setattr(self, attr, None)
