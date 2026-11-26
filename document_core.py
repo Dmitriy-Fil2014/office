@@ -106,7 +106,7 @@ class DocumentProcessor:
         if file_bytes and b"\x00" not in file_bytes:
             try:
                 decoded = file_bytes.decode("utf-8-sig")
-                if decoded and sum(ch.isprintable() or ch in "\\r\\n\\t" for ch in decoded) / len(decoded) >= 0.85:
+                if decoded and sum(ch.isprintable() or ch in "\r\n\t" for ch in decoded) / len(decoded) >= 0.85:
                     return "txt"
             except UnicodeDecodeError:
                 pass
