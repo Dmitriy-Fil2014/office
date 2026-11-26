@@ -29,16 +29,17 @@ class DocumentProcessor:
     @staticmethod
     def detect_format(file_name, mime_type="", file_bytes=None):
         extension = os.path.splitext(str(file_name).lower())[1]
+        mime_type = (mime_type or "").split(";")[0].strip().lower()
         if file_bytes:
             # Identify common image formats by their file signatures as well as
             # their extension. Android document providers often omit MIME types.
-            if file_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+            if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
                 return "image"
-            if file_bytes.startswith(b"\\xff\\xd8\\xff"):
+            if file_bytes.startswith(b"\xff\xd8\xff"):
                 return "image"
             if file_bytes.startswith((b"GIF87a", b"GIF89a")):
                 return "image"
-            if file_bytes.startswith(b"BM") or file_bytes.startswith((b"II*\\x00", b"MM\\x00*")):
+            if file_bytes.startswith(b"BM") or file_bytes.startswith((b"II*\x00", b"MM\x00*")):
                 return "image"
             if len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
                 return "image"
@@ -99,6 +100,16 @@ class DocumentProcessor:
         }
         if mime_type in by_mime:
             return by_mime[mime_type]
+        # Some Android DocumentsProviders return a generic MIME type and omit
+        # the filename extension for plain-text documents. Safely recognize
+        # UTF-8 text without NUL bytes instead of rejecting those files.
+        if file_bytes and b"\x00" not in file_bytes:
+            try:
+                decoded = file_bytes.decode("utf-8-sig")
+                if decoded and sum(ch.isprintable() or ch in "\\r\\n\\t" for ch in decoded) / len(decoded) >= 0.85:
+                    return "txt"
+            except UnicodeDecodeError:
+                pass
         raise ValueError(
             "Формат не поддерживается. Используйте ODT, DOCX, XLSX, PPTX, PDF, TXT, RTF, CSV или MD."
         )
