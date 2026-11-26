@@ -296,9 +296,9 @@ class DocumentLocalApp(MDApp):
                     io.BytesIO(data)):
                 raise ValueError("Файл повреждён или не является корректным офисным документом.")
             if self.current_file_format == "xlsx":
-                self.show_spreadsheet_editor()
+                self.show_spreadsheet_viewer()
             elif self.current_file_format == "docx":
-                self.show_word_editor()
+                self.show_word_viewer()
             elif self.current_file_format == "odt":
                 from odt_support import read_odt_bytes
                 text = read_odt_bytes(data)
@@ -306,7 +306,7 @@ class DocumentLocalApp(MDApp):
                 self.show_fullscreen_text_editor(text)
             elif self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = processor.read_pptx_bytes(data)
-                self.show_presentation_editor()
+                self.show_presentation_viewer()
             elif self.current_file_format == "pdf":
                 self.root.ids.save_btn.disabled = True
                 self.show_pdf_viewer()
@@ -936,11 +936,11 @@ class DocumentLocalApp(MDApp):
                     "DOCX/XLSX/PPTX/ODT. Возможно, передана ссылка или неполная копия."
                 )
             if self.current_file_format == "xlsx":
-                self.show_spreadsheet_editor()
+                self.show_spreadsheet_viewer()
                 self.root.ids.status_label.text = "Открыта таблица: " + self.current_file_name
                 return
             if self.current_file_format == "docx":
-                self.show_word_editor()
+                self.show_word_viewer()
                 self.root.ids.status_label.text = "Открыт документ Word: " + self.current_file_name
                 return
             if self.current_file_format == "odt":
@@ -953,7 +953,7 @@ class DocumentLocalApp(MDApp):
                 return
             if self.current_file_format == "pptx":
                 self.root.ids.file_content_view.text = DocumentProcessor.read_pptx_bytes(self.current_file_bytes)
-                self.show_presentation_editor()
+                self.show_presentation_viewer()
                 self.root.ids.status_label.text = "Открыта презентация: " + self.current_file_name
                 return
             if self.current_file_format == "pdf":
@@ -1211,6 +1211,7 @@ class DocumentLocalApp(MDApp):
         for attr in (
             "word_editor_modal", "spreadsheet_view", "presentation_editor",
             "fullscreen_editor", "image_viewer_modal", "pdf_viewer_modal",
+            "word_viewer_modal", "presentation_viewer_modal", "spreadsheet_viewer_modal",
         ):
             modal = getattr(self, attr, None)
             if modal is not None:
@@ -1431,6 +1432,200 @@ class DocumentLocalApp(MDApp):
         modal.add_widget(outer)
         self.fullscreen_editor = modal
         self.fullscreen_text_input = editor
+        modal.open()
+
+    def show_word_viewer(self):
+        """Display DOCX content as a clean, scrollable document rather than a plain text editor."""
+        processor = self._get_processor()
+        blocks = processor.read_word_view_model(self.current_file_bytes)
+        modal = self._make_editor_modal()
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        header = MDBoxLayout(size_hint_y=None, height="52dp", spacing="6dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "Документ Word",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(text="Редактировать",
+            on_release=lambda *_: (modal.dismiss(),
+                Clock.schedule_once(lambda _dt: self.show_word_editor(), 0.15))))
+        header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width="4dp")
+        page = MDBoxLayout(orientation="vertical", size_hint_y=None,
+                           padding=("18dp", "20dp"), spacing="12dp")
+        page.bind(minimum_height=page.setter("height"))
+        page.add_widget(MDLabel(text=self.current_file_name or "Документ",
+            size_hint_y=None, height="42dp", bold=True, font_style="H5",
+            theme_text_color="Custom", text_color=(0.10, 0.16, 0.25, 1)))
+        for block in blocks:
+            kind = block.get("type")
+            if kind in ("paragraph", "section"):
+                value = block.get("text", "")
+                style = block.get("style", "")
+                is_heading = "heading" in style.lower() or "заголов" in style.lower()
+                label = MDLabel(text=value, size_hint_y=None,
+                    height=max(34, min(260, 24 * max(1, value.count("\\n") + 1))),
+                    font_style="H6" if is_heading else "Body1",
+                    bold=is_heading, halign="left", valign="top",
+                    theme_text_color="Custom", text_color=(0.12, 0.15, 0.20, 1))
+                label.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
+                page.add_widget(label)
+            elif kind == "table":
+                rows = block.get("rows", [])
+                columns = max((len(row) for row in rows), default=1)
+                grid = GridLayout(cols=max(1, columns), size_hint=(1, None),
+                                  row_default_height="42dp", row_force_default=True,
+                                  spacing="1dp")
+                grid.bind(minimum_height=grid.setter("height"))
+                for row_index, row in enumerate(rows):
+                    for col_index in range(columns):
+                        value = row[col_index] if col_index < len(row) else ""
+                        cell = MDLabel(text=value, size_hint=(1, None), height="42dp",
+                            halign="left", valign="middle", padding=("6dp", "3dp"),
+                            theme_text_color="Custom",
+                            text_color=(0.12, 0.16, 0.22, 1))
+                        cell.md_bg_color = ((0.88, 0.92, 0.97, 1) if row_index == 0
+                                            else (0.97, 0.98, 0.99, 1))
+                        grid.add_widget(cell)
+                page.add_widget(grid)
+            elif kind == "image":
+                try:
+                    safe_image = processor.normalize_image_bytes(block["data"])
+                    texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
+                    page.add_widget(KivyImage(texture=texture, size_hint=(1, None),
+                        height=min(self.root.width * 0.72, 340),
+                        allow_stretch=True, keep_ratio=True))
+                except Exception:
+                    page.add_widget(MDLabel(text="Не удалось показать встроенное изображение",
+                        size_hint_y=None, height="32dp", theme_text_color="Secondary"))
+        if not blocks:
+            page.add_widget(MDLabel(text="В документе нет отображаемого текста.",
+                size_hint_y=None, height="48dp", theme_text_color="Secondary"))
+        sheet = MDCard(orientation="vertical", size_hint=(1, None),
+                       padding="8dp", radius=[8, 8, 8, 8],
+                       md_bg_color=(1, 1, 1, 1), elevation=2)
+        page.bind(minimum_height=lambda widget, height: setattr(sheet, "height", height + 40))
+        sheet.add_widget(page)
+        scroll.add_widget(sheet)
+        outer.add_widget(scroll)
+        outer.add_widget(self._editor_close_button())
+        modal.add_widget(outer)
+        self.word_viewer_modal = modal
+        modal.open()
+
+    def show_presentation_viewer(self):
+        """Show each PowerPoint slide as a large, clean preview card."""
+        processor = self._get_processor()
+        slides = processor.extract_pptx_slides(self.current_file_bytes)
+        modal = self._make_editor_modal()
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        header = MDBoxLayout(size_hint_y=None, height="52dp", spacing="6dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "PowerPoint",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDLabel(text=str(len(slides)) + " слайд.",
+                                  size_hint_x=None, width="76dp", halign="right"))
+        header.add_widget(MDFillRoundFlatButton(text="Редактировать",
+            on_release=lambda *_: (modal.dismiss(),
+                Clock.schedule_once(lambda _dt: self.show_presentation_editor(), 0.15))))
+        header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width="4dp")
+        listing = MDBoxLayout(orientation="vertical", size_hint_y=None,
+                              spacing="14dp", padding=("4dp", "4dp"))
+        listing.bind(minimum_height=listing.setter("height"))
+        for number, slide in enumerate(slides, start=1):
+            card = MDCard(orientation="vertical", size_hint_y=None,
+                          height="390dp", padding="14dp", spacing="10dp",
+                          radius=[14, 14, 14, 14], md_bg_color=(1, 1, 1, 1),
+                          elevation=2)
+            card.add_widget(MDLabel(text="СЛАЙД " + str(number), size_hint_y=None,
+                height="28dp", bold=True, theme_text_color="Custom",
+                text_color=(0.20, 0.40, 0.65, 1)))
+            text_value = "\\n\\n".join(slide.get("texts", []))
+            if text_value:
+                label = MDLabel(text=text_value, size_hint_y=None,
+                    height=min(130, max(50, 24 * (text_value.count("\\n") + 1))),
+                    halign="left", valign="top", font_style="H6",
+                    theme_text_color="Custom", text_color=(0.08, 0.12, 0.18, 1))
+                label.bind(width=lambda widget, width: setattr(widget, "text_size", (width, None)))
+                card.add_widget(label)
+            for image_bytes in slide.get("images", [])[:4]:
+                try:
+                    safe_image = processor.normalize_image_bytes(image_bytes)
+                    texture = CoreImage(io.BytesIO(safe_image), ext="png").texture
+                    card.add_widget(KivyImage(texture=texture, size_hint=(1, None),
+                        height="170dp", allow_stretch=True, keep_ratio=True))
+                except Exception:
+                    continue
+            if not text_value and not slide.get("images"):
+                card.add_widget(MDLabel(text="Пустой слайд", theme_text_color="Secondary"))
+            listing.add_widget(card)
+        scroll.add_widget(listing)
+        outer.add_widget(scroll)
+        outer.add_widget(self._editor_close_button())
+        modal.add_widget(outer)
+        self.presentation_viewer_modal = modal
+        modal.open()
+
+    def show_spreadsheet_viewer(self):
+        """Preview every worksheet in a readable grid; editing remains a separate action."""
+        processor = self._get_processor()
+        sheets = processor.read_excel_view_model(self.current_file_bytes)
+        modal = self._make_editor_modal()
+        outer = MDBoxLayout(orientation="vertical", padding="10dp", spacing="8dp")
+        header = MDBoxLayout(size_hint_y=None, height="52dp", spacing="6dp")
+        header.add_widget(MDLabel(text=self.current_file_name or "Excel",
+                                  bold=True, valign="middle"))
+        header.add_widget(MDFillRoundFlatButton(text="Редактировать",
+            on_release=lambda *_: (modal.dismiss(),
+                Clock.schedule_once(lambda _dt: self.show_spreadsheet_editor(), 0.15))))
+        header.add_widget(MDFillRoundFlatButton(text="Закрыть",
+            md_bg_color=(0.78, 0.12, 0.16, 1), text_color=(1, 1, 1, 1),
+            on_release=lambda *_: modal.dismiss()))
+        outer.add_widget(header)
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width="4dp")
+        content = MDBoxLayout(orientation="vertical", size_hint_y=None,
+                              spacing="14dp", padding=("2dp", "4dp"))
+        content.bind(minimum_height=content.setter("height"))
+        for sheet in sheets:
+            rows = sheet.get("rows", [])
+            card = MDCard(orientation="vertical", size_hint_y=None,
+                          padding="10dp", spacing="8dp", radius=[12, 12, 12, 12],
+                          md_bg_color=(1, 1, 1, 1), elevation=2)
+            card.add_widget(MDLabel(text=sheet.get("name", "Лист"),
+                size_hint_y=None, height="32dp", bold=True,
+                theme_text_color="Custom", text_color=(0.12, 0.35, 0.22, 1)))
+            columns = max((len(row) for row in rows), default=1)
+            grid = GridLayout(cols=max(1, columns), size_hint=(None, None),
+                              row_default_height="40dp", row_force_default=True,
+                              spacing="1dp")
+            grid.bind(minimum_width=grid.setter("width"),
+                      minimum_height=grid.setter("height"))
+            for row_index, row in enumerate(rows):
+                for col_index in range(columns):
+                    value = row[col_index] if col_index < len(row) else ""
+                    cell = MDLabel(text=str(value), size_hint=(None, None),
+                        size=("112dp", "40dp"), halign="left", valign="middle",
+                        padding=("6dp", "2dp"), theme_text_color="Custom",
+                        text_color=(0.10, 0.15, 0.20, 1))
+                    cell.md_bg_color = ((0.86, 0.93, 0.88, 1) if row_index == 0
+                                        else (0.97, 0.98, 0.97, 1))
+                    grid.add_widget(cell)
+            horizontal = ScrollView(do_scroll_x=True, do_scroll_y=False,
+                                    size_hint=(1, None), height=min(360, max(80, len(rows) * 40 + 4)))
+            horizontal.add_widget(grid)
+            card.add_widget(horizontal)
+            card.height = min(420, max(110, len(rows) * 40 + 86))
+            content.add_widget(card)
+        if not sheets:
+            content.add_widget(MDLabel(text="В книге нет листов.", size_hint_y=None, height="42dp"))
+        scroll.add_widget(content)
+        outer.add_widget(scroll)
+        outer.add_widget(self._editor_close_button())
+        modal.add_widget(outer)
+        self.spreadsheet_viewer_modal = modal
         modal.open()
 
     def show_word_editor(self):
