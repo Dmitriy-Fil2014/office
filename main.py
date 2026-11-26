@@ -1305,9 +1305,11 @@ class DocumentLocalApp(MDApp):
             self.show_fullscreen_text_editor(self._get_processor().read_pdf_bytes(self.current_file_bytes))
             return
         from kivy.metrics import dp
+        from kivy.core.window import Window
         File = autoclass("java.io.File")
         ParcelFileDescriptor = autoclass("android.os.ParcelFileDescriptor")
         PdfRenderer = autoclass("android.graphics.pdf.PdfRenderer")
+        PdfPage = autoclass("android.graphics.pdf.PdfRenderer$Page")
         Bitmap = autoclass("android.graphics.Bitmap")
         BitmapConfig = autoclass("android.graphics.Bitmap$Config")
         BitmapCompress = autoclass("android.graphics.Bitmap$CompressFormat")
@@ -1342,12 +1344,13 @@ class DocumentLocalApp(MDApp):
             for index in range(renderer.getPageCount()):
                 page = renderer.openPage(index)
                 page_width, page_height = int(page.getWidth()), int(page.getHeight())
-                scale = min(1400.0 / max(1, page_width), 1.0)
+                available_width_dp = max(220.0, Window.width / dp(1) - 44.0)
+                scale = min(available_width_dp / max(1, page_width), 1.0)
                 bitmap_width = max(1, int(page_width * scale))
                 bitmap_height = max(1, int(page_height * scale))
                 bitmap = Bitmap.createBitmap(bitmap_width, bitmap_height, BitmapConfig.ARGB_8888)
                 Canvas(bitmap).drawColor(Color.WHITE)
-                page.render(bitmap, None, None, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.render(bitmap, None, None, PdfPage.RENDER_MODE_FOR_DISPLAY)
                 page.close()
                 page_path = os.path.join(render_dir, "page_" + str(index + 1) + ".png")
                 output = FileOutputStream(page_path)
@@ -1359,14 +1362,14 @@ class DocumentLocalApp(MDApp):
                     bitmap.recycle()
                 page_paths.append(page_path)
                 card = MDCard(orientation="vertical", size_hint_y=None,
-                              height=dp(bitmap_height + 36), padding="8dp",
+                              height=dp(bitmap_height / dp(1) + 36), padding="8dp",
                               spacing="5dp", radius=[10, 10, 10, 10],
                               md_bg_color=(1, 1, 1, 1), elevation=2)
                 card.add_widget(MDLabel(text="Страница " + str(index + 1),
                     size_hint_y=None, height="26dp", halign="center",
                     theme_text_color="Custom", text_color=(0.25, 0.3, 0.38, 1)))
                 card.add_widget(KivyImage(source=page_path, size_hint=(1, None),
-                    height=dp(bitmap_height), allow_stretch=True, keep_ratio=True))
+                    height=dp(bitmap_height / dp(1)), allow_stretch=True, keep_ratio=True))
                 pages.add_widget(card)
             scroll.add_widget(pages)
             outer.add_widget(scroll)
