@@ -1311,6 +1311,8 @@ class DocumentLocalApp(MDApp):
         ParcelFileDescriptor = autoclass("android.os.ParcelFileDescriptor")
         PdfRenderer = autoclass("android.graphics.pdf.PdfRenderer")
         PdfPage = autoclass("android.graphics.pdf.PdfRenderer$Page")
+        Rect = autoclass("android.graphics.Rect")
+        Matrix = autoclass("android.graphics.Matrix")
         Bitmap = autoclass("android.graphics.Bitmap")
         BitmapConfig = autoclass("android.graphics.Bitmap$Config")
         BitmapCompress = autoclass("android.graphics.Bitmap$CompressFormat")
@@ -1351,7 +1353,11 @@ class DocumentLocalApp(MDApp):
                 bitmap_height = max(1, int(page_height * scale))
                 bitmap = Bitmap.createBitmap(bitmap_width, bitmap_height, BitmapConfig.ARGB_8888)
                 Canvas(bitmap).drawColor(Color.WHITE)
-                page.render(bitmap, None, None, PdfPage.RENDER_MODE_FOR_DISPLAY)
+                # Use concrete Java objects for the optional render arguments.
+                # Passing Python None here can be mis-resolved by some Pyjnius builds.
+                destination = Rect(0, 0, bitmap_width, bitmap_height)
+                transform = Matrix()
+                page.render(bitmap, destination, transform, PdfPage.RENDER_MODE_FOR_DISPLAY)
                 page.close()
                 page_path = os.path.join(render_dir, "page_" + str(index + 1) + ".png")
                 output = FileOutputStream(page_path)
